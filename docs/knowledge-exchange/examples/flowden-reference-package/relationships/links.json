@@ -1,0 +1,96 @@
+{
+  "$schema": "https://flowden.app/schemas/flowden-package-v1.0.0.schema.json#/$defs/RelationshipsFile",
+  "fkf_version": "1.0.0",
+  "links": [
+    {
+      "id": "rel-note01-cites-src01",
+      "source_type": "note",
+      "source_id": "note-example-01",
+      "target_type": "research",
+      "target_id": "src-example-01",
+      "link_type": "cites",
+      "origin": "citation",
+      "context_snippet": "Note 01 (High-Albedo Cool Roof Membranes) cites synthetic source src-example-01 for 36-month reflectance attenuation bounds."
+    },
+    {
+      "id": "rel-exc01-supports-note01",
+      "source_type": "excerpt",
+      "source_id": "exc-albedo-aging-01",
+      "target_type": "note",
+      "target_id": "note-example-01",
+      "link_type": "supports",
+      "origin": "citation",
+      "context_snippet": "Excerpt exc-albedo-aging-01 provides the quantitative reflectance decay values (0.82 to 0.64) supporting Note 01."
+    },
+    {
+      "id": "rel-exc02-contradicts-note01",
+      "source_type": "excerpt",
+      "source_id": "exc-albedo-moisture-02",
+      "target_type": "note",
+      "target_id": "note-example-01",
+      "link_type": "contradicts",
+      "origin": "ai_suggested",
+      "context_snippet": "Dew-point condensation soiling in humid coastal basins counteracts unmaintained cool-roof reflectance gains."
+    },
+    {
+      "id": "rel-note02-cites-src02",
+      "source_type": "note",
+      "source_id": "note-example-02",
+      "target_type": "research",
+      "target_id": "src-example-02",
+      "link_type": "cites",
+      "origin": "citation",
+      "context_snippet": "Note 02 (Vegetative Canopy Evapotranspiration) cites synthetic source src-example-02 for canyon LAI and SVF data."
+    },
+    {
+      "id": "rel-exc03-supports-note02",
+      "source_type": "excerpt",
+      "source_id": "exc-canopy-lai-01",
+      "target_type": "note",
+      "target_id": "note-example-02",
+      "link_type": "supports",
+      "origin": "citation",
+      "context_snippet": "Excerpt exc-canopy-lai-01 supports the -14.6 K pedestrian MRT reduction and nocturnal SVF tradeoff in Note 02."
+    },
+    {
+      "id": "rel-note01-relates-note02",
+      "source_type": "note",
+      "source_id": "note-example-01",
+      "target_type": "note",
+      "target_id": "note-example-02",
+      "link_type": "relates_to",
+      "origin": "inline_link",
+      "context_snippet": "Both notes share the display title 'Thermal Performance Summary' for complementary urban layers and cross-link via stable IDs."
+    },
+    {
+      "id": "rel-note03-derived-note01",
+      "source_type": "note",
+      "source_id": "note-example-03",
+      "target_type": "note",
+      "target_id": "note-example-01",
+      "link_type": "derived_from",
+      "origin": "inline_link",
+      "context_snippet": "Integrated Microclimate Synthesis (note-example-03) is derived from the cool-roof envelope analysis in note-example-01."
+    },
+    {
+      "id": "rel-note03-derived-note02",
+      "source_type": "note",
+      "source_id": "note-example-03",
+      "target_type": "note",
+      "target_id": "note-example-02",
+      "link_type": "derived_from",
+      "origin": "inline_link",
+      "context_snippet": "Integrated Microclimate Synthesis (note-example-03) is derived from the vegetative canopy analysis in note-example-02."
+    },
+    {
+      "id": "rel-task01-depends-note01",
+      "source_type": "task",
+      "source_id": "tsk-verify-aging-curve",
+      "target_type": "note",
+      "target_id": "note-example-01",
+      "link_type": "depends_on",
+      "origin": "task_sync",
+      "context_snippet": "Verification task tsk-verify-aging-curve depends on the reflectance decay model documented in note-example-01."
+    }
+  ]
+}

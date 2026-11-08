@@ -1,0 +1,248 @@
+/* ==========================================================================
+   FLOWDEN: BASE STYLES & RESET
+   ========================================================================== */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: var(--lh-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --------------------------------------------------------------------------
+   Typography
+   -------------------------------------------------------------------------- */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+  font-weight: var(--font-semibold);
+  letter-spacing: -0.02em;
+  line-height: var(--lh-tight);
+}
+
+h1 { font-size: var(--text-xl); letter-spacing: -0.025em; }
+h2 { font-size: var(--text-lg); letter-spacing: -0.02em; }
+h3 { font-size: var(--text-md); letter-spacing: -0.015em; }
+h4 { font-size: var(--text-base); }
+
+/* Brand Wordmark Custom Typography */
+.brand-wordmark {
+  font-family: var(--font-brand);
+  font-weight: var(--font-bold);
+  letter-spacing: 0.12em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+}
+
+.brand-wordmark-dot {
+  color: var(--accent-primary);
+  margin-left: 1px;
+}
+
+p {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  line-height: var(--lh-normal);
+}
+
+a {
+  color: var(--accent-deep, var(--accent-primary));
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+code, kbd, samp, pre {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+code {
+  padding: 2px 6px;
+  background-color: var(--surface-well, var(--bg-tertiary));
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--accent-deep, var(--accent-primary));
+}
+
+pre {
+  padding: var(--space-4);
+  background-color: var(--surface-well, var(--bg-secondary));
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+pre code {
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border-primary);
+  margin: var(--space-4) 0;
+}
+
+/* --------------------------------------------------------------------------
+   Accessibility & Focus
+   -------------------------------------------------------------------------- */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  background: var(--btn-primary-bg, var(--accent-primary));
+  color: var(--btn-primary-text, var(--text-inverse));
+  font-weight: var(--font-medium);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  z-index: 99999;
+  transition: top var(--transition-fast);
+}
+
+.skip-link:focus {
+  top: var(--space-4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Scrollbar Styling
+   -------------------------------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-secondary);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* --------------------------------------------------------------------------
+   Utilities
+   -------------------------------------------------------------------------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-secondary { color: var(--text-secondary); }
+.text-tertiary { color: var(--text-tertiary); }
+.text-muted { color: var(--text-muted, var(--text-secondary)); }
+.text-xs { font-size: var(--text-xs); }
+.text-sm { font-size: var(--text-sm); }
+.text-base { font-size: var(--text-base); }
+.text-md { font-size: var(--text-md); }
+.text-lg { font-size: var(--text-lg); }
+.text-xl { font-size: var(--text-xl); }
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --------------------------------------------------------------------------
+   Theme Shell Scoping (Light Mode Surface Separation)
+   -------------------------------------------------------------------------- */
+[data-theme="light"] #app-topbar {
+  background-color: var(--surface-topbar, #FFFFFF);
+}
+
+[data-theme="light"] #app-sidebar {
+  background-color: var(--surface-sidebar, #F6F3EC);
+}
+
+/* --------------------------------------------------------------------------
+   Page Transition Animations (220ms natural easing, fade + 5px subtle movement)
+   -------------------------------------------------------------------------- */
+@keyframes pageFadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-transition {
+  animation: pageFadeSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .page-transition,
+  #app-sidebar,
+  #app-inspector,
+  .sidebar-smart-tooltip,
+  .vault-panel-splitter {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+

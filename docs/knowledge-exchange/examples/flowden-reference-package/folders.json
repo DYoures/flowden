@@ -1,0 +1,27 @@
+{
+  "$schema": "https://flowden.app/schemas/flowden-package-v1.0.0.schema.json#/$defs/FoldersFile",
+  "fkf_version": "1.0.0",
+  "folders": [
+    {
+      "id": "fld-empirical-models",
+      "name": "01 - Empirical Subsystem Models",
+      "parent_id": null,
+      "sort_order": 1,
+      "description": "Primary thermal and radiative subsystem models for urban heat mitigation."
+    },
+    {
+      "id": "fld-roofing-systems",
+      "name": "High-Albedo Roofing Envelopes",
+      "parent_id": "fld-empirical-models",
+      "sort_order": 1,
+      "description": "Nested subfolder under Empirical Subsystem Models focusing on reflective roof membranes."
+    },
+    {
+      "id": "fld-synthesis-tradeoffs",
+      "name": "02 - Integrated Synthesis & Tradeoffs",
+      "parent_id": null,
+      "sort_order": 2,
+      "description": "Cross-layer microclimate syntheses and tradeoff matrices."
+    }
+  ]
+}

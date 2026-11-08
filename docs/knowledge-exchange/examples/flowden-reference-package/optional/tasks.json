@@ -1,0 +1,33 @@
+{
+  "$schema": "https://flowden.app/schemas/flowden-package-v1.0.0.schema.json#/$defs/OptionalTasksFile",
+  "fkf_version": "1.0.0",
+  "tasks": [
+    {
+      "id": "tsk-verify-aging-curve",
+      "title": "Verify 36-month cool-roof reflectance aging curve against empirical field panels",
+      "description": "Cross-check the synthetic attenuation curve in note-example-01 (0.82 to 0.64 solar reflectance) against physical coupon measurements before finalizing municipal retrofit specifications.",
+      "status": "planned",
+      "priority": "high",
+      "due_date": null,
+      "sort_order": 1,
+      "related_entity_ids": [
+        "note-example-01",
+        "src-example-01"
+      ]
+    },
+    {
+      "id": "tsk-calibrate-canopy-sensor",
+      "title": "Calibrate nocturnal Sky-View Factor hemispherical fisheye imagery in test canyon",
+      "description": "Confirm whether pruning lower canopy branches restores SVF above 0.45 while retaining daytime pedestrian MRT reduction documented in note-example-02.",
+      "status": "planned",
+      "priority": "medium",
+      "due_date": null,
+      "sort_order": 2,
+      "related_entity_ids": [
+        "note-example-02",
+        "note-example-03",
+        "src-example-02"
+      ]
+    }
+  ]
+}

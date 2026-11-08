@@ -1,0 +1,110 @@
+{
+  "$schema": "https://flowden.app/schemas/flowden-package-v1.0.0.schema.json#/$defs/OptionalSpatialBoardFile",
+  "fkf_version": "1.0.0",
+  "board": {
+    "id": "brd-urban-cooling-synthesis",
+    "title": "Urban Heat-Island Mitigation — Spatial Synthesis Canvas",
+    "description": "Visual 2D layout projecting canonical Notes and verification Tasks across envelope and street-canyon layers.",
+    "groups": [
+      {
+        "id": "grp-empirical-layers",
+        "title": "Empirical Subsystem Layers",
+        "color": "#6366f1",
+        "position_x": 80,
+        "position_y": 80,
+        "width": 620,
+        "height": 420
+      },
+      {
+        "id": "grp-synthesis-actions",
+        "title": "Integrated Synthesis & Verification",
+        "color": "#10b981",
+        "position_x": 760,
+        "position_y": 80,
+        "width": 460,
+        "height": 420
+      }
+    ],
+    "items": [
+      {
+        "id": "bitm-proj-note-01",
+        "group_id": "grp-empirical-layers",
+        "item_type": "note",
+        "reference_type": "note",
+        "reference_package_id": "note-example-01",
+        "title": "Thermal Performance Summary (High-Albedo Cool Roof Membranes)",
+        "content": "Projection of canonical Note note-example-01.",
+        "position_x": 110,
+        "position_y": 140,
+        "width": 260,
+        "height": 140,
+        "color": "#1e293b"
+      },
+      {
+        "id": "bitm-proj-note-02",
+        "group_id": "grp-empirical-layers",
+        "item_type": "note",
+        "reference_type": "note",
+        "reference_package_id": "note-example-02",
+        "title": "Thermal Performance Summary (Vegetative Canopy Evapotranspiration)",
+        "content": "Projection of canonical Note note-example-02.",
+        "position_x": 410,
+        "position_y": 140,
+        "width": 260,
+        "height": 140,
+        "color": "#1e293b"
+      },
+      {
+        "id": "bitm-proj-note-03",
+        "group_id": "grp-synthesis-actions",
+        "item_type": "note",
+        "reference_type": "note",
+        "reference_package_id": "note-example-03",
+        "title": "Integrated Microclimate Synthesis & Tradeoff Matrix",
+        "content": "Projection of canonical Note note-example-03.",
+        "position_x": 800,
+        "position_y": 140,
+        "width": 380,
+        "height": 140,
+        "color": "#1e293b"
+      },
+      {
+        "id": "bitm-proj-task-01",
+        "group_id": "grp-synthesis-actions",
+        "item_type": "task",
+        "reference_type": "task",
+        "reference_package_id": "tsk-verify-aging-curve",
+        "title": "Verify 36-month cool-roof reflectance aging curve against empirical field panels",
+        "content": "Projection of canonical Task tsk-verify-aging-curve.",
+        "position_x": 800,
+        "position_y": 320,
+        "width": 380,
+        "height": 120,
+        "color": "#0f172a"
+      }
+    ],
+    "connections": [
+      {
+        "id": "bcon-wire-01",
+        "source_item_id": "bitm-proj-note-01",
+        "target_item_id": "bitm-proj-note-03",
+        "connection_type": "flow",
+        "label": "Envelope cooling input"
+      },
+      {
+        "id": "bcon-wire-02",
+        "source_item_id": "bitm-proj-note-02",
+        "target_item_id": "bitm-proj-note-03",
+        "connection_type": "flow",
+        "label": "Canyon latent cooling input"
+      },
+      {
+        "id": "bcon-wire-03",
+        "source_item_id": "bitm-proj-note-03",
+        "target_item_id": "bitm-proj-task-01",
+        "connection_type": "flow",
+        "label": "Next verification action"
+      }
+    ]
+  }
+}

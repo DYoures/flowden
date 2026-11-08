@@ -1,0 +1,32 @@
+{
+  "name": "flowden",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "test": "node tests/foundation.test.js && node tests/workspace.test.js && node tests/segment4.test.js && node tests/launch_assets.test.js",
+    "test:foundation": "node tests/foundation.test.js",
+    "test:workspace": "node tests/workspace.test.js",
+    "test:segment4": "node tests/segment4.test.js",
+    "test:launch": "node tests/launch_assets.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mammoth": "^1.13.0",
+    "multer": "^2.5.0",
+    "mysql2": "^3.24.6",
+    "pdf-parse": "^2.4.5"
+  }
+}

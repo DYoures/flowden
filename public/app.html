@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flowden: Spatial Workspace</title>
+  
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="alternate icon" href="/favicon.ico">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/layout.css">
+  <link rel="stylesheet" href="/css/vault.css">
+  <link rel="stylesheet" href="/css/pages/assistant.css">
+</head>
+<body>
+
+  <a href="#main-content" class="skip-link">Skip to main workspace</a>
+
+  <div id="app-container">
+    <!-- Left Collapsible Sidebar -->
+    <aside id="app-sidebar" aria-label="Main Navigation">
+      <div class="sidebar-brand">
+        <a href="#/overview" class="brand-logo-area" aria-label="Flowden Home">
+          <div class="brand-mark-wrapper">
+            <img src="/assets/branding/flowden-mark-light.svg" alt="Flowden Mark" class="brand-mark-img brand-mark--light">
+            <img src="/assets/branding/flowden-mark-dark.svg" alt="Flowden Mark" class="brand-mark-img brand-mark--dark">
+          </div>
+          <div class="brand-wordmark-wrapper">
+            <img src="/assets/branding/flowden-wordmark-light.svg" alt="Flowden Wordmark" class="brand-wordmark-img brand-wordmark--light">
+            <img src="/assets/branding/flowden-wordmark-dark.svg" alt="Flowden Wordmark" class="brand-wordmark-img brand-wordmark--dark">
+          </div>
+        </a>
+        <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" aria-label="Toggle Sidebar Navigation" title="Toggle Sidebar (Ctrl+B)">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
+        </button>
+      </div>
+
+      <nav class="sidebar-content">
+        <div class="sidebar-section-title">Main</div>
+        <a href="#/overview" class="nav-item" aria-label="Overview" title="Overview">
+          <span class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></span>
+          <span class="nav-item-label">Overview</span>
+        </a>
+        <a href="#/projects" class="nav-item" aria-label="Projects" title="Projects">
+          <span class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><path d="M8 10v4"/><path d="M12 10v2"/><path d="M16 10v6"/></svg></span>
+          <span class="nav-item-label">Projects</span>
+        </a>
+
+        <div class="sidebar-section-title">Knowledge</div>
+        <a href="#/vault" class="nav-item" aria-label="Knowledge Vault" title="Knowledge Vault">
+          <span class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
+          <span class="nav-item-label">Knowledge Vault</span>
+        </a>
+        <a href="#/graph" class="nav-item" aria-label="Knowledge Graph" title="Knowledge Graph">
+          <span class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg></span>
+          <span class="nav-item-label">Knowledge Graph</span>
+        </a>
+
+        <div class="sidebar-section-title">Research</div>
+        <a href="#/research" class="nav-item" aria-label="Research Center" title="Research Center">
+          <span class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v3"/><circle cx="8" cy="15" r="4"/><path d="m11 18 3 3"/></svg></span>
+          <span class="nav-item-label">Research Center</span>
+        </a>
+
+        <div class="sidebar-section-title">Productivity</div>
+        <a href="#/workflow" class="nav-item" aria-label="Workflow Tracker" title="Workflow Tracker">
+          <span class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+          <span class="nav-item-label">Workflow Tracker</span>
+        </a>
+
+        <div class="sidebar-section-title">Additional Tools</div>
+        <a href="#/capture" class="nav-item" aria-label="Quick Capture" title="Quick Capture">
+          <span class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span>
+          <span class="nav-item-label">Quick Capture</span>
+        </a>
+        <a href="#/assistant" class="nav-item" aria-label="AI Assistant" title="AI Assistant">
+          <span class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span>
+          <span class="nav-item-label">AI Assistant</span>
+        </a>
+        <a href="#/guide" class="nav-item" aria-label="Flowden Guide" title="Flowden Guide">
+          <span class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></span>
+          <span class="nav-item-label">Flowden Guide</span>
+        </a>
+      </nav>
+
+      <!-- User Profile and Settings at Sidebar Bottom -->
+      <div class="sidebar-footer">
+        <a href="#/settings" class="nav-item" style="margin: 0 0 4px 0;" aria-label="Settings" title="Settings">
+          <span class="nav-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+          <span class="nav-item-label">Settings</span>
+        </a>
+        <button class="user-profile-btn" aria-label="User Account Menu">
+          <div class="user-avatar">U</div>
+          <div class="user-info">
+            <div class="user-name">Loading...</div>
+            <div class="user-role">User</div>
+          </div>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Collapsed Sidebar Smart Hover Tooltip -->
+    <div id="sidebar-smart-tooltip" class="sidebar-smart-tooltip" role="tooltip" aria-hidden="true">
+      <div class="tooltip-title"></div>
+      <div class="tooltip-desc"></div>
+    </div>
+
+    <!-- Main Wrapper -->
+    <div id="app-main-wrapper">
+      <!-- Topbar -->
+      <header id="app-topbar">
+        <div class="topbar-left">
+          <button class="btn btn--ghost btn--icon btn--sm" id="topbar-sidebar-toggle" aria-label="Toggle Sidebar Navigation">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div id="topbar-breadcrumb" class="breadcrumb">
+            <span class="breadcrumb-item">Flowden</span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-current">Overview</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <!-- Global Search Entry Point -->
+          <button class="topbar-search-trigger" aria-label="Global Search">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span>Search workspace...</span>
+            <span class="topbar-search-key">Ctrl+K</span>
+          </button>
+
+          <!-- Theme Switching -->
+          <button class="theme-toggle-btn" id="topbar-theme-toggle" aria-label="Toggle Theme" title="Toggle Theme">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Workspace Canvas / Pages -->
+      <main id="main-content" role="main">
+        <div class="flex-center" style="height: 100%;">
+          <div class="spinner"></div>
+        </div>
+      </main>
+
+      <!-- Contextual Right Inspector Panel (Collapsible) -->
+      <aside id="app-inspector" aria-label="Contextual Inspector">
+        <div class="inspector-header">
+          <span class="inspector-title">Inspector</span>
+          <button class="inspector-close" id="inspector-close-btn" aria-label="Close Inspector">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+        <div class="inspector-body" id="inspector-body">
+          <span class="text-xs text-tertiary">Select an item on the board or vault to inspect properties and connections.</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Core JavaScript Modules -->
+  <script src="/js/utils/icons.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/router.js"></script>
+  <script src="/js/components/toast.js"></script>
+  <script src="/js/components/modal.js"></script>
+  <script src="/js/components/dropdown.js"></script>
+  <script src="/js/components/inspector.js"></script>
+  <script src="/js/components/commandPalette.js"></script>
+  <script src="/js/components/tour.js"></script>
+  <script src="/js/components/vaultHelp.js"></script>
+  <script src="/js/components/smartLinkHandler.js"></script>
+  <script src="/js/components/vaultEditor.js"></script>
+  <script src="/js/components/exchangeModal.js"></script>
+
+  <!-- Page Controllers -->
+  <script src="/js/pages/overview.js"></script>
+  <script src="/js/pages/projects.js"></script>
+  <script src="/js/pages/projectDashboard.js"></script>
+  <script src="/js/pages/board.js"></script>
+  <script src="/js/pages/vault.js"></script>
+  <script src="/js/pages/graph.js"></script>
+  <script src="/js/pages/research.js"></script>
+  <script src="/js/pages/workflow.js"></script>
+  <script src="/js/pages/capture.js"></script>
+  <script src="/js/pages/assistant.js"></script>
+  <script src="/js/pages/guide.js"></script>
+  <script src="/js/pages/settings.js"></script>
+  <script src="/js/pages/search.js"></script>
+
+  <!-- Main Orchestrator -->
+  <script src="/js/app.js"></script>
+</body>
+</html>
+

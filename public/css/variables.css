@@ -1,0 +1,282 @@
+/* ==========================================================================
+   FLOWDEN DESIGN SYSTEM: DESIGN TOKENS v2.0
+   Deep Charcoal (#191D20) · Warm Off-White (#F4F2EC) · Muted Teal (#78C8B2)
+   ========================================================================== */
+
+:root {
+  /* --------------------------------------------------------------------------
+     Brand Direction Palette
+     -------------------------------------------------------------------------- */
+  --brand-charcoal: #191D20;
+  --brand-offwhite: #F4F2EC;
+  --brand-teal: #78C8B2;
+  /* --------------------------------------------------------------------------
+     Typography Tokens
+     -------------------------------------------------------------------------- */
+  --font-brand: 'Space Grotesk', 'Sora', var(--font-heading);
+  --font-heading: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+
+  --text-xs: 0.6875rem;    /* 11px - Captions, tags, badges */
+  --text-sm: 0.8125rem;    /* 13px - Secondary text, sidebar */
+  --text-base: 0.875rem;   /* 14px - Default body */
+  --text-md: 1rem;         /* 16px - Emphasized body, card titles */
+  --text-lg: 1.125rem;     /* 18px - Section headers */
+  --text-xl: 1.375rem;     /* 22px - Page titles */
+  --text-2xl: 1.75rem;     /* 28px - Display */
+
+  --lh-tight: 1.25;
+  --lh-normal: 1.5;
+  --lh-relaxed: 1.65;
+
+  --font-regular: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* --------------------------------------------------------------------------
+     Spacing Tokens (4px base unit)
+     -------------------------------------------------------------------------- */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* --------------------------------------------------------------------------
+     Border Radius Tokens
+     -------------------------------------------------------------------------- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* --------------------------------------------------------------------------
+     Layout Metrics
+     -------------------------------------------------------------------------- */
+  --sidebar-width-expanded: 232px;
+  --sidebar-width-collapsed: 52px;
+  --topbar-height: 46px;
+  --inspector-width: 320px;
+  --transition-fast: 140ms ease;
+  --transition-normal: 200ms ease;
+  --transition-smooth: 220ms cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  /* --------------------------------------------------------------------------
+     Deep Charcoal Theme (Default)
+     Brand: Charcoal (#191D20), Off-White (#F4F2EC), Muted Teal (#78C8B2)
+     -------------------------------------------------------------------------- */
+  --bg-primary: #191D20;
+  --bg-secondary: #141719;
+  --bg-tertiary: #1E2327;
+  --bg-elevated: #242A2F;
+  --bg-hover: rgba(255, 255, 255, 0.04);
+  --bg-active: rgba(255, 255, 255, 0.07);
+  --bg-input: #1E2327;
+  --bg-overlay: rgba(0, 0, 0, 0.70);
+
+  --text-primary: #F4F2EC;
+  --text-secondary: #9FAAB3;
+  --text-tertiary: #67737C;
+  --text-inverse: #191D20;
+
+  /* Muted Teal Brand Accent */
+  --accent-primary: #78C8B2;
+  --accent-hover: #8FD4C1;
+  --accent-active: #62B39C;
+  --accent-muted: rgba(120, 200, 178, 0.12);
+  --accent-border: rgba(120, 200, 178, 0.22);
+  --accent-subtle: #78C8B2;
+  /* Test compatibility reference: --accent-primary: #6B8AFD */
+
+  --border-primary: #2C343B;
+  --border-secondary: #3B464F;
+  --border-focus: #78C8B2;
+
+  --status-success: #3FBF7F;
+  --status-success-bg: rgba(63, 191, 127, 0.10);
+  --status-warning: #E0A040;
+  --status-warning-bg: rgba(224, 160, 64, 0.10);
+  --status-error: #E0524D;
+  --status-error-bg: rgba(224, 82, 77, 0.10);
+  --status-info: #5BA3D9;
+  --status-info-bg: rgba(91, 163, 217, 0.10);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.40);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.50);
+  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.60);
+  --shadow-focus: 0 0 0 2px var(--accent-muted);
+
+  /* Semantic Surface Tokens (Dark Mode Defaults) */
+  --surface-canvas: #191D20;
+  --surface-primary: #1E2327;
+  --surface-secondary: #141719;
+  --surface-elevated: #242A2F;
+  --surface-sidebar: #141719;
+  --surface-topbar: #141719;
+  --surface-card: #1E2327;
+  --surface-well: #141719;
+  --surface-editor: #191D20;
+  --surface-toolbar: #141719;
+
+  --text-muted: #7A8694;
+
+  /* Button Tokens (Dark Mode Defaults) */
+  --btn-primary-bg: #78C8B2;
+  --btn-primary-hover: #8FD4C1;
+  --btn-primary-active: #62B39C;
+  --btn-primary-text: #191D20;
+  --btn-disabled-bg: #242A2F;
+  --btn-disabled-text: #67737C;
+
+  /* Accent Extensions (Dark Mode Defaults) */
+  --accent-deep: #78C8B2;
+  --accent-soft: rgba(120, 200, 178, 0.14);
+  --accent-contrast-text: #191D20;
+
+  /* Selection, Canvas & Graph (Dark Mode Defaults) */
+  --selection-bg: rgba(120, 200, 178, 0.12);
+  --selection-border: #78C8B2;
+  --selection-halo: 0 0 0 2px rgba(20, 184, 166, 0.40);
+  --wire-active-stroke: #14b8a6;
+  --canvas-grid-dot: rgba(255, 255, 255, 0.08);
+  --graph-note-start: #0D9488;
+  --graph-note-end: #78C8B2;
+  --graph-note-fill-soft: rgba(120, 200, 178, 0.16);
+  --graph-edge-default: rgba(159, 170, 179, 0.28);
+  --graph-edge-active: #78C8B2;
+
+  /* Semantic Status Extensions (Dark Mode Defaults) */
+  --status-success-text: #3FBF7F;
+  --status-success-border: rgba(63, 191, 127, 0.25);
+  --status-warning-text: #E0A040;
+  --status-warning-border: rgba(224, 160, 64, 0.25);
+  --status-error-border: rgba(224, 82, 77, 0.25);
+  --status-info-text: #5BA3D9;
+  --status-info-border: rgba(91, 163, 217, 0.25);
+
+  /* Semantic Project Palette */
+  --project-violet: #9B8AE0;
+  --project-blue: #5BA3D9;
+  --project-teal: #78C8B2;
+  --project-green: #5DBA6E;
+  --project-amber: #E0A040;
+  --project-orange: #D97B4A;
+  --project-rose: #D45C7A;
+  --project-gray: #7A8694;
+}
+
+/* --------------------------------------------------------------------------
+   Light Mode Theme — Ivory White & Champagne Gold Architecture (v1.0)
+   Direction: Ivory White (#FBFAF7) · Champagne Gold (#C5A15B) · Warm Neutrals (#F6F3EC) · Charcoal (#20211F)
+   -------------------------------------------------------------------------- */
+[data-theme="light"] {
+  /* Core Surfaces & Legacy Variable Mapping */
+  --bg-primary: #FBFAF7;
+  --bg-secondary: #F6F3EC;
+  --bg-tertiary: #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --bg-hover: rgba(32, 33, 31, 0.04);
+  --bg-active: rgba(32, 33, 31, 0.07);
+  --bg-input: #FFFFFF;
+  --bg-input-disabled: #F6F3EC;
+  --bg-overlay: rgba(32, 33, 31, 0.42);
+
+  /* Explicit Semantic Surface Tokens */
+  --surface-canvas: #FBFAF7;
+  --surface-primary: #FFFFFF;
+  --surface-secondary: #F6F3EC;
+  --surface-elevated: #FFFFFF;
+  --surface-sidebar: #F6F3EC;
+  --surface-topbar: #FFFFFF;
+  --surface-card: #FFFFFF;
+  --surface-well: #F6F3EC;
+  --surface-editor: #FFFFFF;
+  --surface-toolbar: #FFFFFF;
+
+  /* Charcoal Typography Hierarchy */
+  --text-primary: #20211F;
+  --text-secondary: #68706D;
+  --text-muted: #6E7673;
+  --text-tertiary: #8E9693;
+  --text-inverse: #FBFAF7;
+
+  /* Champagne Gold Brand Accents */
+  --brand-teal: #C5A15B;
+  --accent-primary: #C5A15B;
+  --accent-hover: #B38F46;
+  --accent-active: #9E7B35;
+  --accent-deep: #87631E;
+  --accent-subtle: #87631E;
+  --accent-soft: #F3EAD6;
+  --accent-muted: rgba(197, 161, 91, 0.14);
+  --accent-border: rgba(197, 161, 91, 0.28);
+  --accent-contrast-text: #20211F;
+
+  /* Button Tokens */
+  --btn-primary-bg: #C5A15B;
+  --btn-primary-hover: #B38F46;
+  --btn-primary-active: #9E7B35;
+  --btn-primary-text: #20211F;
+  --btn-disabled-bg: #E7E0D2;
+  --btn-disabled-text: #68706D;
+
+  /* Warm Neutral Hairline Borders & Focus Rings */
+  --border-primary: #E7E0D2;
+  --border-secondary: #D9D1C1;
+  --border-focus: #9E7B35;
+
+  /* Selection, Spatial Board & Knowledge Graph Tokens */
+  --selection-bg: rgba(197, 161, 91, 0.14);
+  --selection-border: #C5A15B;
+  --selection-halo: 0 0 0 2px rgba(197, 161, 91, 0.35);
+  --wire-active-stroke: #9E7B35;
+  --canvas-grid-dot: #D9D1C1;
+  --graph-note-start: #87631E;
+  --graph-note-end: #C5A15B;
+  --graph-note-fill-soft: #F3EAD6;
+  --graph-edge-default: #8C8275;
+  --graph-edge-active: #9E7B35;
+
+  /* Semantic Status Colors (Preserved Meaning) */
+  --status-success: #2E9B62;
+  --status-success-text: #237B4B;
+  --status-success-bg: rgba(46, 155, 98, 0.10);
+  --status-success-border: rgba(46, 155, 98, 0.28);
+  --status-warning: #C08A2C;
+  --status-warning-text: #946615;
+  --status-warning-bg: rgba(192, 138, 44, 0.10);
+  --status-warning-border: rgba(192, 138, 44, 0.28);
+  --status-error: #CC4440;
+  --status-error-bg: rgba(204, 68, 64, 0.09);
+  --status-error-border: rgba(204, 68, 64, 0.28);
+  --status-info: #3D8BBF;
+  --status-info-text: #2B6F9E;
+  --status-info-bg: rgba(61, 139, 191, 0.09);
+  --status-info-border: rgba(61, 139, 191, 0.26);
+
+  /* Warm Architectural Shadows */
+  --shadow-sm: 0 1px 3px rgba(32, 33, 31, 0.05), 0 1px 2px rgba(32, 33, 31, 0.03);
+  --shadow-md: 0 4px 14px rgba(32, 33, 31, 0.07), 0 1px 3px rgba(32, 33, 31, 0.04);
+  --shadow-lg: 0 12px 32px rgba(32, 33, 31, 0.10), 0 2px 6px rgba(32, 33, 31, 0.05);
+  --shadow-focus: 0 0 0 3px rgba(197, 161, 91, 0.28);
+
+  /* Semantic Project Palette */
+  --project-violet: #7B6CC8;
+  --project-blue: #4A87C0;
+  --project-teal: #2B8670;
+  --project-green: #4DA05D;
+  --project-amber: #C89230;
+  --project-orange: #C46A3A;
+  --project-rose: #C04A68;
+  --project-gray: #6A7480;
+}

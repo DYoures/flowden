@@ -1,0 +1,112 @@
+{
+  "$schema": "https://flowden.app/schemas/flowden-package-v1.0.0.schema.json",
+  "format": "flowden-knowledge-package",
+  "fkf_version": "1.0.0",
+  "min_compatible_fkf_version": "1.0.0",
+  "package_id": "pkg-urban-heat-reference-01",
+  "generator": {
+    "system_name": "Flowden Architecture Reference Generator",
+    "model_identifier": "fkf-reference-fixture-v1",
+    "generated_at": "2026-11-07T04:30:00Z",
+    "spec_version": "1.0.0",
+    "research_prompt_summary": "Reference demonstration package modeling urban heat-island mitigation strategies, cool-roof albedo bounds, and vegetative evapotranspiration.",
+    "contains_synthetic_sources": true
+  },
+  "project": {
+    "id": "proj-urban-heat-mitigation",
+    "title": "Adaptive Urban Heat-Island Mitigation",
+    "summary": "Structured synthesis of high-albedo surface retrofits and vegetative canopy cooling models (Reference Demonstration Package).",
+    "overview_file": "project/overview.md",
+    "color": "#6366f1",
+    "icon": "layers",
+    "tags": [
+      "urban-climate",
+      "albedo",
+      "microclimate"
+    ]
+  },
+  "index_files": {
+    "folders": "folders.json",
+    "sources": "sources/index.json",
+    "relationships": "relationships/links.json"
+  },
+  "entities": {
+    "notes": [
+      {
+        "id": "note-example-01",
+        "title": "Thermal Performance Summary",
+        "disambiguation_hint": "High-Albedo Cool Roof Membranes",
+        "file": "notes/note-example-01.md",
+        "folder_id": "fld-roofing-systems",
+        "is_pinned": true,
+        "tags": [
+          "urban-climate",
+          "albedo",
+          "cool-roofs"
+        ],
+        "verification_status": "synthetic_demonstration",
+        "asset_ids": [],
+        "sha256": "3ad358fb81b8b7b37afae1d067fe08f0463c80d0a051fe423649a9c62dcd5286"
+      },
+      {
+        "id": "note-example-02",
+        "title": "Thermal Performance Summary",
+        "disambiguation_hint": "Vegetative Canopy Evapotranspiration",
+        "file": "notes/note-example-02.md",
+        "folder_id": "fld-empirical-models",
+        "is_pinned": false,
+        "tags": [
+          "urban-climate",
+          "evapotranspiration",
+          "canopy-modeling"
+        ],
+        "verification_status": "synthetic_demonstration",
+        "asset_ids": [],
+        "sha256": "f802465ed398dcde2199884da108541e91a443265141ae867074800f6fc12482"
+      },
+      {
+        "id": "note-example-03",
+        "title": "Integrated Microclimate Synthesis & Tradeoff Matrix",
+        "disambiguation_hint": null,
+        "file": "notes/note-example-03.md",
+        "folder_id": "fld-synthesis-tradeoffs",
+        "is_pinned": true,
+        "tags": [
+          "urban-climate",
+          "synthesis",
+          "architecture-diagram"
+        ],
+        "verification_status": "synthetic_demonstration",
+        "asset_ids": [
+          "ast-architecture-diagram"
+        ],
+        "sha256": "1110e4ec8f7344361c33507cb4a39800a87fdc2d673d4a31fe520f04b6f1d38b"
+      }
+    ],
+    "assets": [
+      {
+        "id": "ast-architecture-diagram",
+        "filename": "architecture-diagram.png",
+        "path": "assets/architecture-diagram.png",
+        "mime_type": "image/png",
+        "size_bytes": 785,
+        "sha256": "9776eaead7c58891a3275ac2fb366fc8e7a715d43dc270d91374b3b4a7613d0c",
+        "alt_text": "Coupled Roof-to-Canyon Thermal Exchange Diagram"
+      }
+    ]
+  },
+  "optional_modules": {
+    "tasks": {
+      "enabled": true,
+      "file": "optional/tasks.json"
+    },
+    "spatial_board": {
+      "enabled": true,
+      "file": "optional/spatial-board.json"
+    },
+    "research_report_pdf": {
+      "enabled": false,
+      "file": null
+    }
+  }
+}

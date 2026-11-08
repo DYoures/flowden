@@ -1,0 +1,164 @@
+{
+  "multiSelection": {
+    "selectionAndToolbar": {
+      "selectedCount": 3,
+      "selectedTexts": [
+        "Paragraph Alpha: Core workspac",
+        "Checklist Beta: Verify multi-b",
+        "NOTE:"
+      ],
+      "selectedTypes": [
+        "paragraph",
+        "checklist",
+        "callout"
+      ],
+      "toolbarVisible": true,
+      "badgeText": "3 selected",
+      "hasAllButtons": true
+    },
+    "groupMoveDown": {
+      "domTexts": [
+        "Section 1: Architecture O",
+        "Paragraph Alpha: Core wor",
+        "Checklist Beta: Verify mu",
+        "NOTE:",
+        "Paragraph Delta: Unselect",
+        "MetricTargetLatency12ms",
+        "25%\n                    5"
+      ],
+      "selectedStillCount": 3
+    },
+    "persistedOrderAfterReload": [
+      "Section 1: Architecture O",
+      "Paragraph Alpha: Core wor",
+      "Checklist Beta: Verify mu",
+      "NOTE:",
+      "Paragraph Delta: Unselect",
+      "MetricTargetLatency12ms",
+      "25%\n                    5"
+    ],
+    "duplicateAndUndoRedo": {
+      "totalBlocksAfterDup": 7,
+      "allIdsUnique": true,
+      "domTexts": [
+        "Section 1: Architectur",
+        "Paragraph Alpha: Core ",
+        "Checklist Beta: Verify",
+        "NOTE:",
+        "Paragraph Delta: Unsel",
+        "MetricTargetLatency12m",
+        "25%\n                  "
+      ],
+      "afterUndoDupCount": 7,
+      "afterRedoDupCount": 7
+    },
+    "deleteAndUndo": {
+      "afterDeleteState": {
+        "remainingCount": 7,
+        "remainingTexts": [
+          "Section 1: Architectur",
+          "Paragraph Alpha: Core ",
+          "Checklist Beta: Verify",
+          "NOTE:",
+          "Paragraph Delta: Unsel",
+          "MetricTargetLatency12m",
+          "25%\n                  "
+        ]
+      },
+      "afterUndoDeleteState": {
+        "restoredCount": 7,
+        "restoredTexts": [
+          "Section 1: Architectur",
+          "Paragraph Alpha: Core ",
+          "Checklist Beta: Verify",
+          "NOTE:",
+          "Paragraph Delta: Unsel",
+          "MetricTargetLatency12m",
+          "25%\n                  "
+        ]
+      }
+    },
+    "copyCutPaste": {
+      "countAfterCopyPaste": 7,
+      "countAfterCut": 7,
+      "countAfterCutPaste": 7,
+      "imgCount": 1
+    }
+  },
+  "youtubeThumbnails": {
+    "initialRender": {
+      "bookmarks": [
+        {
+          "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          "videoId": "dQw4w9WgXcQ",
+          "thumbSrc": "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 720,
+          "faviconSrc": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
+          "faviconSeparateFromThumb": true
+        },
+        {
+          "url": "https://youtu.be/jNQXAC9IVRw",
+          "videoId": "jNQXAC9IVRw",
+          "thumbSrc": "https://i.ytimg.com/vi/jNQXAC9IVRw/maxresdefault.jpg",
+          "complete": true,
+          "naturalWidth": 120,
+          "naturalHeight": 90,
+          "faviconSrc": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
+          "faviconSeparateFromThumb": true
+        }
+      ],
+      "embeds": [
+        {
+          "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          "videoId": "dQw4w9WgXcQ",
+          "isShorts": false,
+          "thumbSrc": "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 720,
+          "isUnavailableFallbackActive": false,
+          "fallbackVisible": false,
+          "initialIframeCount": 0
+        },
+        {
+          "url": "https://www.youtube.com/shorts/jNQXAC9IVRw",
+          "videoId": "jNQXAC9IVRw",
+          "isShorts": true,
+          "thumbSrc": "https://i.ytimg.com/vi/jNQXAC9IVRw/maxresdefault.jpg",
+          "complete": true,
+          "naturalWidth": 120,
+          "naturalHeight": 90,
+          "isUnavailableFallbackActive": false,
+          "fallbackVisible": false,
+          "initialIframeCount": 0
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=00000000000",
+          "videoId": "00000000000",
+          "isShorts": false,
+          "thumbSrc": "https://i.ytimg.com/vi/00000000000/maxresdefault.jpg",
+          "complete": true,
+          "naturalWidth": 120,
+          "naturalHeight": 90,
+          "isUnavailableFallbackActive": false,
+          "fallbackVisible": false,
+          "initialIframeCount": 0
+        }
+      ]
+    },
+    "bookmarkClickNavigation": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "playActivation": {
+      "iframeCreated": true,
+      "iframeSrc": "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1"
+    }
+  },
+  "genericBookmarks": {
+    "validOgImageLoaded": true,
+    "noImageCardHasNoThumbElement": true,
+    "brokenImageThumbHiddenCleanly": false,
+    "brokenFaviconFellBackToSvg": false
+  },
+  "regressions": {}
+}

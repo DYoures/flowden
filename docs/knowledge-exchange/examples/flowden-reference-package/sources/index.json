@@ -1,0 +1,71 @@
+{
+  "$schema": "https://flowden.app/schemas/flowden-package-v1.0.0.schema.json#/$defs/SourcesIndexFile",
+  "fkf_version": "1.0.0",
+  "sources": [
+    {
+      "id": "src-example-01",
+      "title": "[SYNTHETIC DEMO SOURCE] Reflective Roof Membrane Aging and Radiative Flux Bounds in Dense Districts",
+      "source_type": "synthetic_demonstration",
+      "authors": [
+        "Flowden Reference Fixture Generator (Synthetic Example — Not a Real Citation)"
+      ],
+      "publication_date": null,
+      "accessed_date": "2026-11-07",
+      "source_url": null,
+      "verification_status": "synthetic_demonstration",
+      "is_synthetic_example": true,
+      "summary": "Synthetic demonstration source modeling 36-month solar reflectance attenuation and dew-point condensation cycles on high-albedo roofing membranes.",
+      "content_file": "sources/source-example-01.md",
+      "tags": [
+        "synthetic-demo",
+        "albedo",
+        "cool-roofs"
+      ],
+      "excerpts": [
+        {
+          "id": "exc-albedo-aging-01",
+          "quoted_text": "Across simulated 36-month particulate deposition cycles, unwashed thermoplastic membranes declined from 0.82 to 0.64 solar reflectance, reducing peak midday roof surface cooling from 18.4 K to 11.2 K.",
+          "annotation": "Quantifies the 36-month weathering bound used in Note 01 (High-Albedo Cool Roof Membranes).",
+          "location_anchor": "Section 2.4, Table 2",
+          "color": "#6366f1"
+        },
+        {
+          "id": "exc-albedo-moisture-02",
+          "quoted_text": "In coastal basins where nocturnal relative humidity exceeds 78%, sub-ambient radiative cooling drops untreated membrane surfaces 1.8 K below ambient dew point, promoting biofilm colonization unless fluorinated or siliconized topcoats are specified.",
+          "annotation": "Explains the moisture-condensation tradeoff highlighted in the synthesis matrix.",
+          "location_anchor": "Section 4.1, Paragraph 3",
+          "color": "#f59e0b"
+        }
+      ]
+    },
+    {
+      "id": "src-example-02",
+      "title": "[SYNTHETIC DEMO SOURCE] Street-Canyon Leaf Area Index and Nocturnal Longwave Trapping",
+      "source_type": "synthetic_demonstration",
+      "authors": [
+        "Flowden Reference Fixture Generator (Synthetic Example — Not a Real Citation)"
+      ],
+      "publication_date": null,
+      "accessed_date": "2026-11-07",
+      "source_url": null,
+      "verification_status": "synthetic_demonstration",
+      "is_synthetic_example": true,
+      "summary": "Synthetic demonstration source evaluating pedestrian Mean Radiant Temperature (MRT) reduction versus nocturnal Sky-View Factor longwave trapping in vegetated street canyons.",
+      "content_file": "sources/source-example-02.md",
+      "tags": [
+        "synthetic-demo",
+        "evapotranspiration",
+        "canopy-modeling"
+      ],
+      "excerpts": [
+        {
+          "id": "exc-canopy-lai-01",
+          "quoted_text": "In synthetic canyon simulations with aspect ratio H/W = 1.5, increasing crown Leaf Area Index (LAI) from 1.2 to 3.8 lowered pedestrian-level Mean Radiant Temperature (MRT) by 14.6 K at 14:00 local solar time, while reducing canyon Sky-View Factor below 0.35 and slowing post-sunset air cooling by 1.1 K.",
+          "annotation": "Primary quantitative basis for Note 02 (Vegetative Canopy Evapotranspiration) and the nocturnal SVF tradeoff.",
+          "location_anchor": "Section 3.2, Figure 4",
+          "color": "#10b981"
+        }
+      ]
+    }
+  ]
+}

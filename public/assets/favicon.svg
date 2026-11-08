@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <style>
+    .favicon-bg { fill: #191D20; }
+    .favicon-accent { fill: #78C8B2; }
+    .favicon-mark { fill: #F4F2EC; }
+    @media (prefers-color-scheme: light) {
+      .favicon-bg { fill: #FBFAF7; }
+      .favicon-accent { fill: #C5A15B; }
+      .favicon-mark { fill: #20211F; }
+    }
+  </style>
+  <rect width="32" height="32" rx="6" class="favicon-bg"/>
+  <!-- Teal / Champagne Gold accent block -->
+  <polygon points="11.8,9.8 15.5,9.8 15.5,26.0 8.0,26.0 11.8,22.2" class="favicon-accent" fill="#78C8B2"/>
+  <!-- F Mark letterform -->
+  <polygon points="8.0,9.8 11.8,6.0 24.4,6.0 20.6,9.8 11.8,9.8 11.8,14.0 21.5,14.0 17.7,17.9 11.8,17.9 11.8,22.2 8.0,26.0" class="favicon-mark" fill="#F4F2EC"/>
+</svg>

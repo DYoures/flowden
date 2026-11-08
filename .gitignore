@@ -1,0 +1,65 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local fallback data store (contains user records / password hashes)
+server/data/*
+!server/data/.gitkeep
+
+# User uploaded files and assets
+uploads/*
+!uploads/.gitkeep
+!uploads/*/.gitkeep
+
+# Browser test profiles & automation sessions (anchored to root)
+/.chrome_*/
+/tmp_edge_*/
+/scratch/.chrome_*/
+
+# Temporary directories, journals, and local media
+/temp/
+/scratch/
+/rev/
+
+# Server backup archives and code snapshots
+server/_backups_phase2b1/
+server/migrations (2).zip
+server/routes.zip
+
+# Backup extensions and transient code snapshots anywhere
+*.bak
+*_bak
+*.boundary_bak
+*.phase6_bak
+
+# Root transient test runners & investigation scripts (anchored so tests/ is unaffected)
+/audit_browser.js
+/audit_full_interactions.js
+/debug_auth.js
+/inspect_graph_inspector.js
+/inspect_graph_text.js
+/test_full_ui.js
+/test_graph_states.js
+/test_inv_mask.js
+/test_spatial_board.js
+/test_tour.js
+/test_tour_ux.js
+/verify_branding_suite.js
+/REVIEW_BUNDLE.md
+
+# Root screenshot artifacts (anchored so public/assets and docs images are unaffected)
+/graph_dark_screenshot.png
+/graph_light_inspector.png
+/graph_light_screenshot.png
+/state_dark_selected.png
+/state_light_hover.png
+/state_light_selected.png
+
+# Logs and OS artifacts
+*.log
+.DS_Store
+Thumbs.db

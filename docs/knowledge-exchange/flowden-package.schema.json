@@ -1,0 +1,1214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowden.app/schemas/flowden-package-v1.0.0.schema.json",
+  "title": "Flowden Knowledge Format (FKF) v1.0.0 Schema",
+  "description": "Formal JSON Schema (Draft 2020-12) for validating Flowden Knowledge Package (.flowden.zip) manifest.json and companion JSON files (folders.json, sources/index.json, relationships/links.json, optional/tasks.json, optional/spatial-board.json).",
+  "$ref": "#/$defs/ManifestDocument",
+  "$defs": {
+    "SemVer": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+      "description": "Semantic version string (MAJOR.MINOR.PATCH)."
+    },
+    "PackageId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{2,63}$",
+      "minLength": 3,
+      "maxLength": 64,
+      "description": "Stable, immutable package-local identifier. Must start with a lowercase ASCII letter and contain only lowercase letters, digits, underscores, or hyphens."
+    },
+    "ProjectId": {
+      "type": "string",
+      "pattern": "^proj-[a-z0-9_-]{2,58}$",
+      "description": "Stable package-local identifier for the Project (prefixed with 'proj-')."
+    },
+    "FolderId": {
+      "type": "string",
+      "pattern": "^fld-[a-z0-9_-]{2,59}$",
+      "description": "Stable package-local identifier for a Note Folder (prefixed with 'fld-')."
+    },
+    "NoteId": {
+      "type": "string",
+      "pattern": "^note-[a-z0-9_-]{2,58}$",
+      "description": "Stable package-local identifier for a Note (prefixed with 'note-')."
+    },
+    "SourceId": {
+      "type": "string",
+      "pattern": "^src-[a-z0-9_-]{2,59}$",
+      "description": "Stable package-local identifier for a Research Source (prefixed with 'src-')."
+    },
+    "ExcerptId": {
+      "type": "string",
+      "pattern": "^exc-[a-z0-9_-]{2,59}$",
+      "description": "Stable package-local identifier for a Research Excerpt (prefixed with 'exc-')."
+    },
+    "AssetId": {
+      "type": "string",
+      "pattern": "^ast-[a-z0-9_-]{2,59}$",
+      "description": "Stable package-local identifier for a binary/media Asset (prefixed with 'ast-')."
+    },
+    "TaskId": {
+      "type": "string",
+      "pattern": "^tsk-[a-z0-9_-]{2,59}$",
+      "description": "Stable package-local identifier for an optional Task (prefixed with 'tsk-')."
+    },
+    "BoardId": {
+      "type": "string",
+      "pattern": "^brd-[a-z0-9_-]{2,59}$",
+      "description": "Stable package-local identifier for an optional Spatial Board (prefixed with 'brd-')."
+    },
+    "BoardGroupId": {
+      "type": "string",
+      "pattern": "^grp-[a-z0-9_-]{2,59}$",
+      "description": "Stable package-local identifier for a Spatial Board Group (prefixed with 'grp-')."
+    },
+    "BoardItemId": {
+      "type": "string",
+      "pattern": "^bitm-[a-z0-9_-]{2,58}$",
+      "description": "Stable package-local identifier for a Spatial Board Item (prefixed with 'bitm-')."
+    },
+    "RelationshipRecordId": {
+      "type": "string",
+      "pattern": "^rel-[a-z0-9_-]{2,59}$",
+      "description": "Stable package-local identifier for a semantic Relationship record (prefixed with 'rel-')."
+    },
+    "BoardConnectionId": {
+      "type": "string",
+      "pattern": "^bcon-[a-z0-9_-]{2,58}$",
+      "description": "Stable package-local identifier for a visual Spatial Board canvas wire (prefixed with 'bcon-')."
+    },
+    "RelativePackagePath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!\\\\)(?!.*\\.\\.)(?!.*:)[a-zA-Z0-9_./-]+$",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "POSIX-style path relative to the package root. Must not start with '/' or '\\', contain '..', or include drive letters."
+    },
+    "Sha256Hex": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase hexadecimal SHA-256 digest of the file."
+    },
+    "HexColor": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$",
+      "description": "6-digit CSS hexadecimal color string (e.g., '#6366f1')."
+    },
+    "IsoDateTime": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$",
+      "description": "ISO 8601 UTC or offset date-time timestamp."
+    },
+    "IsoDateOrNull": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "ISO 8601 calendar date (YYYY-MM-DD) or null when unknown/unspecified."
+    },
+    "TagName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9 _/-]{0,99}$",
+      "description": "Normalized knowledge tag name."
+    },
+    "CanonicalEntityType": {
+      "type": "string",
+      "enum": [
+        "project",
+        "note",
+        "task",
+        "research",
+        "excerpt",
+        "board",
+        "decision",
+        "capture"
+      ],
+      "description": "Canonical entity types supported by Flowden's entities and entity_links tables."
+    },
+    "SemanticLinkType": {
+      "type": "string",
+      "enum": [
+        "references",
+        "embeds",
+        "cites",
+        "derived_from",
+        "supports",
+        "contradicts",
+        "inspired_by",
+        "depends_on",
+        "blocks",
+        "relates_to"
+      ],
+      "description": "Exact 10 semantic relationship types supported by Flowden's entity_links.link_type column."
+    },
+    "LinkOriginType": {
+      "type": "string",
+      "enum": [
+        "inline_link",
+        "embed",
+        "board_promoted",
+        "citation",
+        "task_sync",
+        "capture_convert",
+        "manual",
+        "ai_suggested"
+      ],
+      "description": "Provenance origin of an entity_links record."
+    },
+    "VerificationStatus": {
+      "type": "string",
+      "enum": [
+        "verified",
+        "partially_verified",
+        "unverified_external",
+        "synthetic_demonstration"
+      ],
+      "description": "Epistemic verification level of a note or research source."
+    },
+    "GeneratorMetadata": {
+      "type": "object",
+      "required": [
+        "system_name",
+        "generated_at",
+        "spec_version"
+      ],
+      "properties": {
+        "system_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Name of the external AI system or tool that generated the package (e.g., 'Claude 3.7 Sonnet', 'ChatGPT o3-mini', 'NotebookLM')."
+        },
+        "model_identifier": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 120
+        },
+        "generated_at": {
+          "$ref": "#/$defs/IsoDateTime"
+        },
+        "spec_version": {
+          "$ref": "#/$defs/SemVer"
+        },
+        "research_prompt_summary": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1000
+        },
+        "contains_synthetic_sources": {
+          "type": "boolean",
+          "default": false,
+          "description": "Must be true if the package includes synthetic demonstration sources rather than real bibliographic citations."
+        }
+      },
+      "additionalProperties": true
+    },
+    "ProjectMetadata": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "summary",
+        "overview_file"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ProjectId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Maps to projects.title (VARCHAR(200))."
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Plain-text summary mapped to projects.description (TEXT)."
+        },
+        "overview_file": {
+          "type": "string",
+          "const": "project/overview.md",
+          "description": "Relative path to the rich Markdown Project Overview document, imported as a pinned root Note."
+        },
+        "color": {
+          "$ref": "#/$defs/HexColor",
+          "default": "#6366f1"
+        },
+        "icon": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50,
+          "default": "folder"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TagName"
+          },
+          "uniqueItems": true,
+          "maxItems": 30
+        }
+      },
+      "additionalProperties": true
+    },
+    "ManifestNoteEntry": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "file",
+        "folder_id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/NoteId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Human-readable Note title mapped to notes.title (VARCHAR(300)). Multiple Notes may share similar or identical titles while retaining distinct package-local IDs."
+        },
+        "disambiguation_hint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 120,
+          "description": "Optional context qualifier used to disambiguate notes that share identical display titles during import."
+        },
+        "file": {
+          "$ref": "#/$defs/RelativePackagePath",
+          "pattern": "^notes/[a-zA-Z0-9_-]+\\.md$"
+        },
+        "folder_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FolderId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "is_pinned": {
+          "type": "boolean",
+          "default": false
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TagName"
+          },
+          "uniqueItems": true,
+          "maxItems": 50
+        },
+        "verification_status": {
+          "$ref": "#/$defs/VerificationStatus",
+          "default": "verified"
+        },
+        "asset_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AssetId"
+          },
+          "uniqueItems": true
+        },
+        "sha256": {
+          "$ref": "#/$defs/Sha256Hex"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ManifestAssetEntry": {
+      "type": "object",
+      "required": [
+        "id",
+        "filename",
+        "path",
+        "mime_type",
+        "size_bytes",
+        "sha256"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/AssetId"
+        },
+        "filename": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9._-]+$",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "path": {
+          "$ref": "#/$defs/RelativePackagePath",
+          "pattern": "^assets/[a-zA-Z0-9._-]+$"
+        },
+        "mime_type": {
+          "type": "string",
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/gif",
+            "image/webp",
+            "application/pdf",
+            "text/plain",
+            "text/markdown",
+            "text/csv",
+            "application/json",
+            "video/mp4",
+            "video/webm",
+            "audio/mpeg",
+            "audio/wav",
+            "audio/ogg"
+          ]
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 52428800
+        },
+        "sha256": {
+          "$ref": "#/$defs/Sha256Hex"
+        },
+        "alt_text": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 300
+        }
+      },
+      "additionalProperties": true
+    },
+    "OptionalModulesDeclaration": {
+      "type": "object",
+      "required": [
+        "tasks",
+        "spatial_board",
+        "research_report_pdf"
+      ],
+      "properties": {
+        "tasks": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "file"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "file": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "const": "optional/tasks.json"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "spatial_board": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "file"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "file": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "const": "optional/spatial-board.json"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "research_report_pdf": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "file"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "file": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RelativePackagePath",
+                  "pattern": "^exports/[a-zA-Z0-9._-]+\\.pdf$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "ManifestDocument": {
+      "type": "object",
+      "required": [
+        "format",
+        "fkf_version",
+        "package_id",
+        "generator",
+        "project",
+        "index_files",
+        "entities",
+        "optional_modules"
+      ],
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string",
+          "const": "flowden-knowledge-package",
+          "description": "Fixed format identifier for Flowden Knowledge Exchange packages."
+        },
+        "fkf_version": {
+          "$ref": "#/$defs/SemVer",
+          "description": "Flowden Knowledge Format semantic version (e.g., '1.0.0')."
+        },
+        "min_compatible_fkf_version": {
+          "$ref": "#/$defs/SemVer",
+          "default": "1.0.0"
+        },
+        "package_id": {
+          "$ref": "#/$defs/PackageId",
+          "description": "Unique identifier for this package bundle."
+        },
+        "generator": {
+          "$ref": "#/$defs/GeneratorMetadata"
+        },
+        "project": {
+          "$ref": "#/$defs/ProjectMetadata"
+        },
+        "index_files": {
+          "type": "object",
+          "required": [
+            "folders",
+            "sources",
+            "relationships"
+          ],
+          "properties": {
+            "folders": {
+              "type": "string",
+              "const": "folders.json"
+            },
+            "sources": {
+              "type": "string",
+              "const": "sources/index.json"
+            },
+            "relationships": {
+              "type": "string",
+              "const": "relationships/links.json"
+            }
+          },
+          "additionalProperties": false
+        },
+        "entities": {
+          "type": "object",
+          "required": [
+            "notes",
+            "assets"
+          ],
+          "properties": {
+            "notes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 300,
+              "items": {
+                "$ref": "#/$defs/ManifestNoteEntry"
+              }
+            },
+            "assets": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "$ref": "#/$defs/ManifestAssetEntry"
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        "optional_modules": {
+          "$ref": "#/$defs/OptionalModulesDeclaration"
+        }
+      },
+      "additionalProperties": true
+    },
+    "FolderRecord": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "parent_id",
+        "sort_order"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/FolderId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Folder name mapped to note_folders.name (VARCHAR(200))."
+        },
+        "parent_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FolderId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Parent package-local folder ID, or null for a root folder."
+        },
+        "sort_order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": true
+    },
+    "FoldersFile": {
+      "type": "object",
+      "required": [
+        "fkf_version",
+        "folders"
+      ],
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "fkf_version": {
+          "$ref": "#/$defs/SemVer"
+        },
+        "folders": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/FolderRecord"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "SourceExcerptRecord": {
+      "type": "object",
+      "required": [
+        "id",
+        "quoted_text",
+        "annotation",
+        "location_anchor"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ExcerptId"
+        },
+        "quoted_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10000,
+          "description": "Verbatim excerpt or structured data extract from the source, mapped to research_excerpts.quoted_text."
+        },
+        "annotation": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 5000,
+          "description": "Analytical note or interpretation of the excerpt, mapped to research_excerpts.annotation."
+        },
+        "location_anchor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 100,
+          "description": "Section, page, or paragraph anchor (e.g., 'Section 3.2, Table 1'), mapped to research_excerpts.location_anchor."
+        },
+        "color": {
+          "type": "string",
+          "maxLength": 30,
+          "default": "#6366f1"
+        }
+      },
+      "additionalProperties": true
+    },
+    "SourceRecord": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "source_type",
+        "authors",
+        "publication_date",
+        "accessed_date",
+        "source_url",
+        "verification_status",
+        "is_synthetic_example",
+        "summary",
+        "content_file",
+        "excerpts"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/SourceId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Source title mapped to research_documents.title (VARCHAR(300))."
+        },
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "journal_article",
+            "technical_report",
+            "book_or_chapter",
+            "web_documentation",
+            "dataset",
+            "standard_or_specification",
+            "primary_interview_or_field_note",
+            "synthetic_demonstration"
+          ]
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": "Known authors or issuing organizations. Empty array if unknown; never fabricated."
+        },
+        "publication_date": {
+          "$ref": "#/$defs/IsoDateOrNull",
+          "description": "Publication date (YYYY-MM-DD) when known, or null. Must never be fabricated."
+        },
+        "accessed_date": {
+          "$ref": "#/$defs/IsoDateOrNull"
+        },
+        "source_url": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^https?://[^\\s]+$",
+              "maxLength": 1000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "External HTTP/HTTPS URL mapped to research_documents.source_url, or null when offline/synthetic."
+        },
+        "verification_status": {
+          "$ref": "#/$defs/VerificationStatus"
+        },
+        "is_synthetic_example": {
+          "type": "boolean",
+          "description": "True if and only if this record is a synthetic demonstration fixture rather than a real external citation."
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 5000,
+          "description": "Executive summary of the source mapped to research_documents.summary."
+        },
+        "content_file": {
+          "$ref": "#/$defs/RelativePackagePath",
+          "pattern": "^sources/[a-zA-Z0-9_-]+\\.md$"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TagName"
+          },
+          "uniqueItems": true,
+          "maxItems": 30
+        },
+        "excerpts": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/SourceExcerptRecord"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "SourcesIndexFile": {
+      "type": "object",
+      "required": [
+        "fkf_version",
+        "sources"
+      ],
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "fkf_version": {
+          "$ref": "#/$defs/SemVer"
+        },
+        "sources": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/SourceRecord"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "RelationshipRecord": {
+      "type": "object",
+      "required": [
+        "id",
+        "source_type",
+        "source_id",
+        "target_type",
+        "target_id",
+        "link_type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RelationshipRecordId"
+        },
+        "source_type": {
+          "$ref": "#/$defs/CanonicalEntityType"
+        },
+        "source_id": {
+          "$ref": "#/$defs/PackageId",
+          "description": "Package-local ID of the source entity (never a display title)."
+        },
+        "target_type": {
+          "$ref": "#/$defs/CanonicalEntityType"
+        },
+        "target_id": {
+          "$ref": "#/$defs/PackageId",
+          "description": "Package-local ID of the target entity (never a display title)."
+        },
+        "link_type": {
+          "$ref": "#/$defs/SemanticLinkType"
+        },
+        "origin": {
+          "$ref": "#/$defs/LinkOriginType",
+          "default": "ai_suggested"
+        },
+        "context_snippet": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500,
+          "description": "Human-readable explanation of why these two entities are connected, mapped to entity_links.context_snippet (VARCHAR(500))."
+        }
+      },
+      "additionalProperties": true
+    },
+    "RelationshipsFile": {
+      "type": "object",
+      "required": [
+        "fkf_version",
+        "links"
+      ],
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "fkf_version": {
+          "$ref": "#/$defs/SemVer"
+        },
+        "links": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/$defs/RelationshipRecord"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "TaskRecord": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "description",
+        "status",
+        "priority",
+        "due_date",
+        "related_entity_ids"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/TaskId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Task title mapped to tasks.title (VARCHAR(300))."
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 5000,
+          "description": "Task description mapped to tasks.description."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "planned",
+            "in_progress",
+            "done"
+          ],
+          "default": "planned"
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "urgent"
+          ],
+          "default": "medium"
+        },
+        "due_date": {
+          "$ref": "#/$defs/IsoDateOrNull",
+          "description": "Must be null unless the user explicitly supplied a deadline. External AI must never invent deadlines."
+        },
+        "sort_order": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "related_entity_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackageId"
+          },
+          "uniqueItems": true,
+          "description": "Package-local IDs of Notes or Sources this Task relates to or depends on."
+        }
+      },
+      "additionalProperties": true
+    },
+    "OptionalTasksFile": {
+      "type": "object",
+      "required": [
+        "fkf_version",
+        "tasks"
+      ],
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "fkf_version": {
+          "$ref": "#/$defs/SemVer"
+        },
+        "tasks": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/TaskRecord"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "SpatialBoardGroupRecord": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "color",
+        "position_x",
+        "position_y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/BoardGroupId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "color": {
+          "$ref": "#/$defs/HexColor"
+        },
+        "position_x": {
+          "type": "number"
+        },
+        "position_y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 100
+        },
+        "height": {
+          "type": "number",
+          "minimum": 100
+        }
+      },
+      "additionalProperties": true
+    },
+    "SpatialBoardItemRecord": {
+      "type": "object",
+      "required": [
+        "id",
+        "item_type",
+        "reference_type",
+        "reference_package_id",
+        "title",
+        "position_x",
+        "position_y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/BoardItemId"
+        },
+        "group_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/BoardGroupId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "item_type": {
+          "type": "string",
+          "enum": [
+            "note",
+            "idea",
+            "image",
+            "link",
+            "research_ref",
+            "task",
+            "document"
+          ]
+        },
+        "reference_type": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "project",
+                "note",
+                "task",
+                "research",
+                "excerpt",
+                "board",
+                "decision"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Canonical entity type projected onto the board (mapped to board_items.reference_type)."
+        },
+        "reference_package_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PackageId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Package-local ID of the canonical Note, Task, Research Source, or Excerpt projected by this card."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "content": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 5000
+        },
+        "position_x": {
+          "type": "number"
+        },
+        "position_y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 80
+        },
+        "height": {
+          "type": "number",
+          "minimum": 60
+        },
+        "color": {
+          "$ref": "#/$defs/HexColor",
+          "default": "#1e293b"
+        }
+      },
+      "additionalProperties": true
+    },
+    "SpatialBoardConnectionRecord": {
+      "type": "object",
+      "required": [
+        "id",
+        "source_item_id",
+        "target_item_id",
+        "connection_type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/BoardConnectionId"
+        },
+        "source_item_id": {
+          "$ref": "#/$defs/BoardItemId",
+          "description": "Visual source board_item ID on the canvas (stored in board_item_connections, never in entity_links)."
+        },
+        "target_item_id": {
+          "$ref": "#/$defs/BoardItemId",
+          "description": "Visual target board_item ID on the canvas (stored in board_item_connections, never in entity_links)."
+        },
+        "connection_type": {
+          "type": "string",
+          "maxLength": 50,
+          "default": "flow"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        }
+      },
+      "additionalProperties": true
+    },
+    "OptionalSpatialBoardFile": {
+      "type": "object",
+      "required": [
+        "fkf_version",
+        "board"
+      ],
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "fkf_version": {
+          "$ref": "#/$defs/SemVer"
+        },
+        "board": {
+          "type": "object",
+          "required": [
+            "id",
+            "title",
+            "description",
+            "groups",
+            "items",
+            "connections"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/BoardId"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 2000
+            },
+            "groups": {
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "$ref": "#/$defs/SpatialBoardGroupRecord"
+              }
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 300,
+              "items": {
+                "$ref": "#/$defs/SpatialBoardItemRecord"
+              }
+            },
+            "connections": {
+              "type": "array",
+              "maxItems": 500,
+              "items": {
+                "$ref": "#/$defs/SpatialBoardConnectionRecord"
+              }
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
+
