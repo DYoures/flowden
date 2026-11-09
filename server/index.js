@@ -198,6 +198,10 @@ app.use(errorHandler);
 
 // Start server after DB initialization
 async function start() {
+  // 1. Explicit authentication configuration validation before any I/O, DB, or network listener
+  const authConfig = require('./config/auth');
+  authConfig.validateAuthConfig();
+
   cleanupStaleStagingDirs(3600000);
   await db.initDB();
   await SecurityService.ensureSecurityTables();
@@ -205,12 +209,16 @@ async function start() {
     const KnowledgeExchangeService = require('./services/knowledgeExchangeService');
     await KnowledgeExchangeService.reconcileUnfinishedJobs();
   } catch (_) {}
-  app.listen(PORT, () => {
-    console.log(`\n==================================================`);
-    console.log(`  FLOWDEN: Modern Spatial Productivity Workspace`);
-    console.log(`  Server listening on http://localhost:${PORT}`);
-    console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`==================================================\n`);
+  return new Promise((resolve, reject) => {
+    const server = app.listen(PORT, (err) => {
+      if (err) return reject(err);
+      console.log(`\n==================================================`);
+      console.log(`  FLOWDEN: Modern Spatial Productivity Workspace`);
+      console.log(`  Server listening on http://localhost:${PORT}`);
+      console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`==================================================\n`);
+      resolve(server);
+    });
   });
 }
 

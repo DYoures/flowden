@@ -4,13 +4,15 @@ const OLD_KNOWN_DEFAULT = 'flowden-spatial-workspace-secret-key-2026-production'
 const MIN_SECRET_BYTES = 32;
 
 /**
- * Resolves the JWT secret with strict production security invariants:
+ * Resolves and validates the JWT secret with strict production security invariants:
  * 1. In production (NODE_ENV=production), JWT_SECRET is strictly required.
- *    Missing, empty, short (< 32 bytes), or legacy default values throw immediately.
- * 2. In development and test environments, an explicit valid secret is preferred.
+ *    Missing, empty/whitespace, short (< 32 bytes), or legacy default values throw immediately.
+ * 2. Note on entropy: byte length is strictly verified (>= 32 bytes); callers must supply a
+ *    cryptographically secure random value (e.g. `openssl rand -hex 32`).
+ * 3. In development and test environments, an explicit valid secret is preferred.
  *    If unset, empty, or set to the legacy default, a process-local cryptographically
  *    random secret is generated to avoid any static default leakage across environments.
- * 3. Secret values are never printed or logged.
+ * 4. Secret values are never printed, interpolated, or logged in error messages or logs.
  */
 function resolveJwtSecret(customEnv = process.env) {
   const envSecret = customEnv.JWT_SECRET ? String(customEnv.JWT_SECRET).trim() : '';
@@ -24,7 +26,7 @@ function resolveJwtSecret(customEnv = process.env) {
       throw new Error('[SECURITY CRITICAL] JWT_SECRET must not use the insecure legacy default value in production. Set a secure, unique secret.');
     }
     if (Buffer.byteLength(envSecret, 'utf8') < MIN_SECRET_BYTES) {
-      throw new Error(`[SECURITY CRITICAL] JWT_SECRET must provide at least ${MIN_SECRET_BYTES} bytes of entropy in production.`);
+      throw new Error(`[SECURITY CRITICAL] JWT_SECRET must be at least ${MIN_SECRET_BYTES} bytes in length in production.`);
     }
     return envSecret;
   }
@@ -41,6 +43,14 @@ function resolveJwtSecret(customEnv = process.env) {
   return global.__FLOWDEN_PROCESS_LOCAL_JWT_SECRET__;
 }
 
+/**
+ * Explicit startup validation helper called during application bootstrapping.
+ * Fails fast before any database connections or server listening occur.
+ */
+function validateAuthConfig(customEnv = process.env) {
+  return resolveJwtSecret(customEnv);
+}
+
 module.exports = {
   get jwtSecret() {
     return resolveJwtSecret();
@@ -53,6 +63,7 @@ module.exports = {
     sameSite: 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   },
+  validateAuthConfig,
   _resolveJwtSecret: resolveJwtSecret,
   _OLD_KNOWN_DEFAULT: OLD_KNOWN_DEFAULT,
   _MIN_SECRET_BYTES: MIN_SECRET_BYTES
