@@ -1572,6 +1572,9 @@ class KnowledgeExchangeService {
       }
     } catch (recErr) {
       console.warn('[KnowledgeExchange] Crash reconciler warning:', recErr.message);
+      if (process.env.NODE_ENV === 'production') {
+        throw recErr;
+      }
     }
 
     return recoveredCount;

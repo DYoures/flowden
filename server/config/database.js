@@ -49,7 +49,19 @@ const initialStore = {
   }
 };
 
+function sanitizeDbErrorMessage(msg, secret) {
+  if (!msg) return '';
+  let clean = String(msg);
+  if (secret && secret.length > 0) {
+    clean = clean.split(secret).join('[REDACTED]');
+  }
+  return clean.replace(/(:)([^:@/]+)(@)/g, '$1[REDACTED]$3');
+}
+
 function readLocalStore() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[DB-Production] Local JSON store reading is forbidden in production environment.');
+  }
   try {
     if (!fs.existsSync(localStorePath)) {
       fs.mkdirSync(path.dirname(localStorePath), { recursive: true });
@@ -65,6 +77,9 @@ function readLocalStore() {
 }
 
 function writeLocalStore(data) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[DB-Production] Local JSON store writing is forbidden in production environment.');
+  }
   try {
     fs.writeFileSync(localStorePath, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
@@ -81,8 +96,9 @@ async function initDB() {
 
   console.log(`[DB] Attempting MySQL connection to ${host}:${port}/${database}...`);
 
+  let testConn = null;
   try {
-    const testConn = await mysql.createConnection({
+    testConn = await mysql.createConnection({
       host,
       port,
       user,
@@ -92,6 +108,7 @@ async function initDB() {
 
     await testConn.query(`CREATE DATABASE IF NOT EXISTS \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
     await testConn.end();
+    testConn = null;
 
     pool = mysql.createPool({
       host,
@@ -114,8 +131,29 @@ async function initDB() {
 
     await runMySQLMigrations();
   } catch (err) {
+    if (testConn) {
+      try {
+        await testConn.end();
+      } catch (_) {}
+      testConn = null;
+    }
+    if (pool) {
+      try {
+        await pool.end();
+      } catch (_) {}
+      pool = null;
+    }
+
     isConnectedToMySQL = false;
-    dbStatusMessage = `MySQL unavailable (${err.message}). Using resilient embedded storage.`;
+    const sanitizedMsg = sanitizeDbErrorMessage(err.message, password);
+
+    if (process.env.NODE_ENV === 'production') {
+      dbStatusMessage = `MySQL initialization failed in production: ${sanitizedMsg}`;
+      console.error(`[DB-FATAL] Production database initialization failed: ${sanitizedMsg}`);
+      throw new Error(`[DB-Production] Database initialization failed in production environment: ${sanitizedMsg}`);
+    }
+
+    dbStatusMessage = `MySQL unavailable (${sanitizedMsg}). Using resilient embedded storage.`;
     console.warn(`[DB] ⚠️ ${dbStatusMessage}`);
     readLocalStore();
   }
@@ -147,6 +185,11 @@ async function getConnection() {
       release: () => rawConn.release()
     };
   }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[DB-Production] Database connection pool is unavailable in production mode.');
+  }
+
   // Mock fallback connection
   return {
     query: (sql, params) => query(sql, params),
@@ -164,9 +207,13 @@ async function query(sql, params = []) {
       const [rows] = await pool.query(sql, params);
       return rows;
     } catch (err) {
-      console.error('[DB-MySQL] Query error:', err.message, 'SQL:', sql);
+      console.error('[DB-MySQL] Query error:', sanitizeDbErrorMessage(err.message, process.env.DB_PASSWORD), 'SQL:', sql);
       throw err;
     }
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[DB-Production] MySQL database is unavailable for query execution in production mode.');
   }
 
   return executeLocalQuery(sql, params);
@@ -174,6 +221,9 @@ async function query(sql, params = []) {
 
 // Comprehensive Local SQL emulator
 function executeLocalQuery(sql, params = []) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[DB-Production] Local SQL emulation fallback is forbidden in production environment.');
+  }
   const store = readLocalStore();
   const trimmed = sql.trim();
   const lower = trimmed.toLowerCase();
@@ -407,6 +457,6 @@ module.exports = {
   getStatus: () => ({
     isMySQL: isConnectedToMySQL,
     message: dbStatusMessage,
-    type: isConnectedToMySQL ? 'MySQL 8.0+' : 'Embedded SQLite/JSON Store'
+    type: isConnectedToMySQL ? 'MySQL 8.0+' : (process.env.NODE_ENV === 'production' ? 'Unavailable' : 'Embedded SQLite/JSON Store')
   })
 };

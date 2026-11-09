@@ -204,11 +204,26 @@ async function start() {
 
   cleanupStaleStagingDirs(3600000);
   await db.initDB();
+
+  if (process.env.NODE_ENV === 'production') {
+    const status = db.getStatus();
+    if (!status.isMySQL || !db.getPool()) {
+      throw new Error('[STARTUP FATAL] Production startup aborted: MySQL connection is inactive or pool is null.');
+    }
+  }
+
   await SecurityService.ensureSecurityTables();
+
   try {
     const KnowledgeExchangeService = require('./services/knowledgeExchangeService');
     await KnowledgeExchangeService.reconcileUnfinishedJobs();
-  } catch (_) {}
+  } catch (err) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[STARTUP FATAL] Import reconciliation failed during production startup:', err);
+      throw err;
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const server = app.listen(PORT, (err) => {
       if (err) return reject(err);

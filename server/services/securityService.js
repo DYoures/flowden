@@ -166,6 +166,10 @@ async function ensureSecurityTables() {
       await db.query('ALTER TABLE research_documents ADD COLUMN tags_json JSON NULL DEFAULT NULL');
     }
   } catch (err) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[SecurityService-FATAL] Failed to ensure security tables in production:', err);
+      throw err;
+    }
     // Fallback mode or table creation already handled
   }
 }
