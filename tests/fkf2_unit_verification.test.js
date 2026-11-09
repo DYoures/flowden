@@ -413,6 +413,50 @@ async function runTests() {
     assert.strictEqual(typeof mig.up, 'function', 'Exports up(conn) function');
   });
 
+  await itAsync('Migration 008 up(conn) safely executes idempotent column additions and backfill without swallowing errors', async () => {
+    const mig = require('../server/migrations/008_formalize_importer_schema');
+    const executedSqls = [];
+
+    // Simulate scenario: columns already exist, but some rows have unbackfilled user_id / content_markdown
+    const mockConn = {
+      query: async (sql, params = []) => {
+        executedSqls.push(sql);
+        if (sql.includes('SELECT COLUMN_NAME FROM information_schema.COLUMNS')) {
+          if (sql.includes("'attachments_json'")) return [[{ COLUMN_NAME: 'attachments_json' }]];
+          if (sql.includes("'user_id'")) return [[{ COLUMN_NAME: 'user_id' }]];
+          if (sql.includes("'created_by'")) return [[{ COLUMN_NAME: 'created_by' }]];
+          if (sql.includes("'content_markdown'")) return [[{ COLUMN_NAME: 'content_markdown' }]];
+          if (sql.includes("'content'")) return [[{ COLUMN_NAME: 'content' }]];
+          if (sql.includes("'file_name'")) return [[{ COLUMN_NAME: 'file_name' }]];
+          if (sql.includes("'tags_json'")) return [[{ COLUMN_NAME: 'tags_json' }]];
+          if (sql.includes("'sha256_hash'")) return [[{ COLUMN_NAME: 'sha256_hash' }]];
+        }
+        if (sql.includes('SELECT INDEX_NAME FROM information_schema.STATISTICS')) {
+          return [[{ INDEX_NAME: 'idx_note_versions_user' }]];
+        }
+        if (sql.includes('SELECT TABLE_NAME FROM information_schema.TABLES')) {
+          return [[{ TABLE_NAME: 'file_uploads' }]];
+        }
+        return [{ affectedRows: 2 }];
+      }
+    };
+
+    await mig.up(mockConn);
+
+    // Verify backfills were executed even when columns already exist
+    const userBackfill = executedSqls.find(s => s.includes('UPDATE `note_versions` SET `user_id` = `created_by`'));
+    assert.ok(userBackfill, 'Must execute user_id backfill query when created_by column exists');
+    assert.ok(userBackfill.includes('WHERE `user_id` IS NULL'), 'Backfill must only target rows where user_id IS NULL');
+
+    const contentBackfill = executedSqls.find(s => s.includes('UPDATE `note_versions` SET `content_markdown` = `content`'));
+    assert.ok(contentBackfill, 'Must execute content_markdown backfill query when content column exists');
+    assert.ok(contentBackfill.includes('WHERE `content_markdown` IS NULL'), 'Backfill must only target rows where content_markdown IS NULL');
+
+    // Verify ALTER TABLE was skipped because columns already exist
+    const alterNoteVersions = executedSqls.find(s => s.includes('ALTER TABLE `note_versions` ADD COLUMN `user_id`'));
+    assert.strictEqual(alterNoteVersions, undefined, 'Must skip ALTER TABLE when user_id already exists');
+  });
+
   console.log(`\n=== RESULTS: ${passed} PASSED, ${failed} FAILED ===`);
   if (failed > 0) {
     process.exit(1);

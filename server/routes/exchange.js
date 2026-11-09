@@ -632,19 +632,10 @@ router.post('/commit', (req, res) => {
       let commitZipPath = null;
 
       if (uploadedPath) {
-        // Uploaded file provided: verify SHA-256 matches inspected ticket
+        // Uploaded file provided: verify SHA-256 matches inspected ticket raw hash byte-for-byte
         const uploadedBuf = fs.readFileSync(uploadedPath);
-        const uploadedSha = crypto.createHash('sha256').update(uploadedBuf).digest('hex');
-        let hashOk = (uploadedSha.toLowerCase() === ticket.package_sha256.toLowerCase());
-        if (!hashOk) {
-          try {
-            const reportObj = JSON.parse(ticket.report_json || '{}');
-            if (reportObj.canonical_sha256 && reportObj.canonical_sha256.toLowerCase() === uploadedSha.toLowerCase()) {
-              hashOk = true;
-            }
-          } catch (_) {}
-        }
-        if (!hashOk) {
+        const uploadedSha = crypto.createHash('sha256').update(uploadedBuf).digest('hex').toLowerCase();
+        if (uploadedSha !== ticket.package_sha256.toLowerCase()) {
           return res.status(422).json({
             success: false,
             error: 'Uploaded package bytes do not match the inspected package hash.',
@@ -664,25 +655,14 @@ router.post('/commit', (req, res) => {
         commitZipPath = ticket.staged_package_path;
       }
 
-      // Also verify client-supplied package_sha256 if present
+      // Also verify client-supplied package_sha256 if present (must strictly match raw inspected hash)
       const reqSha = req.body.package_sha256 || req.headers['x-flowden-package-sha256'];
-      if (reqSha) {
-        let clientShaOk = (reqSha.toLowerCase() === ticket.package_sha256.toLowerCase());
-        if (!clientShaOk) {
-          try {
-            const reportObj = JSON.parse(ticket.report_json || '{}');
-            if (reportObj.canonical_sha256 && reportObj.canonical_sha256.toLowerCase() === reqSha.toLowerCase()) {
-              clientShaOk = true;
-            }
-          } catch (_) {}
-        }
-        if (!clientShaOk) {
-          return res.status(422).json({
-            success: false,
-            error: 'Client-supplied package SHA-256 does not match inspected token package hash.',
-            code: 'PACKAGE_HASH_MISMATCH'
-          });
-        }
+      if (reqSha && reqSha.trim().toLowerCase() !== ticket.package_sha256.toLowerCase()) {
+        return res.status(422).json({
+          success: false,
+          error: 'Client-supplied package SHA-256 does not match inspected token package hash.',
+          code: 'PACKAGE_HASH_MISMATCH'
+        });
       }
 
       // 9. Atomic Consumption of Inspection Token

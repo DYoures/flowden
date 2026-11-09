@@ -32,10 +32,21 @@ exports.up = async (conn) => {
   );
   if (!nvUserCols || nvUserCols.length === 0) {
     await conn.query('ALTER TABLE `note_versions` ADD COLUMN `user_id` INT UNSIGNED NULL AFTER `note_id`');
-    // Backfill from created_by if available
-    try {
-      await conn.query('UPDATE `note_versions` SET `user_id` = `created_by` WHERE `user_id` IS NULL AND `created_by` IS NOT NULL');
-    } catch (_) {}
+  }
+
+  // Idempotent backfill: If created_by exists, backfill user_id where it is currently NULL
+  // Runs even if user_id column already existed, preserving any already populated user_id
+  const [nvCreatedByCol] = await conn.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS 
+     WHERE TABLE_SCHEMA = DATABASE() 
+       AND TABLE_NAME = 'note_versions' 
+       AND COLUMN_NAME = 'created_by' 
+     LIMIT 1`
+  );
+  if (nvCreatedByCol && nvCreatedByCol.length > 0) {
+    await conn.query(
+      'UPDATE `note_versions` SET `user_id` = `created_by` WHERE `user_id` IS NULL AND `created_by` IS NOT NULL'
+    );
   }
 
   // Check index on note_versions(note_id, user_id)
@@ -60,10 +71,21 @@ exports.up = async (conn) => {
   );
   if (!nvContentCols || nvContentCols.length === 0) {
     await conn.query('ALTER TABLE `note_versions` ADD COLUMN `content_markdown` LONGTEXT NULL AFTER `title`');
-    // Backfill from content if available
-    try {
-      await conn.query('UPDATE `note_versions` SET `content_markdown` = `content` WHERE `content_markdown` IS NULL AND `content` IS NOT NULL');
-    } catch (_) {}
+  }
+
+  // Idempotent backfill: If legacy content exists, backfill content_markdown where it is currently NULL
+  // Runs even if content_markdown column already existed, preserving any already populated markdown
+  const [nvLegacyContentCol] = await conn.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS 
+     WHERE TABLE_SCHEMA = DATABASE() 
+       AND TABLE_NAME = 'note_versions' 
+       AND COLUMN_NAME = 'content' 
+     LIMIT 1`
+  );
+  if (nvLegacyContentCol && nvLegacyContentCol.length > 0) {
+    await conn.query(
+      'UPDATE `note_versions` SET `content_markdown` = `content` WHERE `content_markdown` IS NULL AND `content` IS NOT NULL'
+    );
   }
 
   // 4. research_documents.file_name

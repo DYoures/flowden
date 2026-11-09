@@ -297,6 +297,68 @@ class KnowledgeExchangeService {
   }
 
   /**
+   * Strictly verifies package file existence, 64-hex SHA-256 format,
+   * and raw byte-for-byte SHA-256 match. Rejects missing, empty, canonical,
+   * or altered package bytes.
+   */
+  static verifyPackageIntegrity({
+    packageSha256,
+    zipFilePath,
+    userId = null,
+    ip = '127.0.0.1'
+  }) {
+    if (!zipFilePath || !fs.existsSync(zipFilePath)) {
+      const err = new Error('Archive file does not exist on disk.');
+      err.code = 'ARCHIVE_FILE_MISSING';
+      err.status = 400;
+      throw err;
+    }
+
+    // Reject empty, null, undefined, or non-64-character hex strings
+    if (!packageSha256 || typeof packageSha256 !== 'string' || !/^[0-9a-fA-F]{64}$/.test(packageSha256.trim())) {
+      if (userId) {
+        SecurityService.logSecurityEvent({
+          userId,
+          eventType: 'EXCHANGE_COMMIT_INVALID_HASH_FORMAT',
+          severity: 'high',
+          ip,
+          targetType: 'exchange_package',
+          details: { packageSha256 }
+        }).catch(() => {});
+      }
+      const err = new Error('Package SHA-256 is required and must be a valid 64-character hex string.');
+      err.code = 'INVALID_PACKAGE_HASH';
+      err.status = 400;
+      throw err;
+    }
+    const expectedSha = packageSha256.trim().toLowerCase();
+
+    // Compute actual archive raw bytes SHA-256
+    const zipBuffer = fs.readFileSync(zipFilePath);
+    const computedRawSha256 = crypto.createHash('sha256').update(zipBuffer).digest('hex').toLowerCase();
+
+    // Strict byte-for-byte integrity comparison (canonical hash cannot substitute raw hash)
+    if (expectedSha !== computedRawSha256) {
+      if (userId) {
+        SecurityService.logSecurityEvent({
+          userId,
+          eventType: 'EXCHANGE_COMMIT_HASH_MISMATCH',
+          severity: 'high',
+          ip,
+          targetType: 'exchange_package',
+          details: { expected: expectedSha, actual: computedRawSha256 }
+        }).catch(() => {});
+      }
+      const err = new Error('Package SHA-256 hash mismatch between inspection approval and commit package.');
+      err.code = 'PACKAGE_HASH_MISMATCH';
+      err.status = 422;
+      throw err;
+    }
+
+    return { valid: true, computedRawSha256 };
+  }
+
+  /**
    * Safe execution of the complete 2-pass transactional import pipeline
    */
   static async executeImport({
@@ -308,57 +370,31 @@ class KnowledgeExchangeService {
     originalFilename,
     destinationProjectId = null,
     conflictResolution = 'disambiguate',
+    dryRunValidateOnly = false,
     ip = '127.0.0.1'
   }) {
     if (!userId) throw new Error('Authenticated user ID is required for import.');
-    if (!zipFilePath || !fs.existsSync(zipFilePath)) {
-      const err = new Error('Archive file does not exist on disk.');
-      err.code = 'ARCHIVE_FILE_MISSING';
-      err.status = 400;
-      throw err;
-    }
 
     const operationId = requestedOpId || crypto.randomUUID();
     const journalPath = path.join(JOURNAL_DIR, `${operationId}.journal.json`);
     const stageDir = path.join(STAGING_BASE_DIR, `fkp_stage_${operationId}`);
 
-    // Compute actual archive SHA-256
-    const zipBuffer = fs.readFileSync(zipFilePath);
-    const computedSha256 = crypto.createHash('sha256').update(zipBuffer).digest('hex');
+    // Verify raw package bytes integrity strictly
+    const { computedRawSha256 } = KnowledgeExchangeService.verifyPackageIntegrity({
+      packageSha256,
+      zipFilePath,
+      userId,
+      ip
+    });
+    const computedSha256 = computedRawSha256;
 
-    let hashMatches = false;
-    if (!packageSha256) {
-      hashMatches = true;
-    } else if (packageSha256.toLowerCase() === computedSha256.toLowerCase()) {
-      hashMatches = true;
-    } else {
-      // Support matching canonical content hash if client supplied it for FKF
-      try {
-        const rawContent = zipBuffer.toString('utf8');
-        const parsedDoc = JSON.parse(rawContent);
-        if (parsedDoc && (parsedDoc.format === 'flowden-knowledge-format' || parsedDoc.format === 'flowden-knowledge-package')) {
-          const { computeDeterministicSha256 } = require('../utils/fkfCanonicalParser');
-          const canonicalHash = computeDeterministicSha256(parsedDoc);
-          if (canonicalHash && canonicalHash.toLowerCase() === packageSha256.toLowerCase()) {
-            hashMatches = true;
-          }
-        }
-      } catch (_) {}
-    }
-
-    if (!hashMatches) {
-      await SecurityService.logSecurityEvent({
-        userId,
-        eventType: 'EXCHANGE_COMMIT_HASH_MISMATCH',
-        severity: 'high',
-        ip,
-        targetType: 'exchange_package',
-        details: { expected: packageSha256, actual: computedSha256 }
-      });
-      const err = new Error('Package SHA-256 hash mismatch between inspection approval and commit package.');
-      err.code = 'PACKAGE_HASH_MISMATCH';
-      err.status = 422;
-      throw err;
+    if (dryRunValidateOnly) {
+      return {
+        success: true,
+        dryRun: true,
+        packageSha256: computedSha256,
+        operationId
+      };
     }
 
     // ------------------------------------------------------------------------

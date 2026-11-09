@@ -179,9 +179,9 @@ async function runIntegrationTests() {
   });
 
   // ---------------------------------------------------------------------------
-  // Test 3: Project Authorization (Owner, Editor, Viewer, Non-Member)
+  // Test 3: Unit / Component Test - Project Authorization (Owner, Editor, Viewer, Non-Member)
   // ---------------------------------------------------------------------------
-  await it('Project authorization allows owner and editor, but strictly rejects viewer and non-member', async () => {
+  await it('Unit / Component Test: Project.hasWriteAccess() dan getMemberRole() mengizinkan owner dan editor, menolak viewer dan non-member', async () => {
     // Stub DB connection that simulates project rows and memberships
     const stubDb = {
       query: async (sql, params = []) => {
@@ -375,26 +375,32 @@ async function runIntegrationTests() {
   });
 
   // ---------------------------------------------------------------------------
-  // Test 6: Inspect-JSON Through Commit Hash Verification
+  // Test 6: Component Test - Strict Raw SHA-256 Validation in executeImport()
+  // Proves:
+  // 1. Raw hash yang benar diterima oleh fungsi verifikasi produksi
+  // 2. Hash yang salah ditolak (PACKAGE_HASH_MISMATCH, 422)
+  // 3. Hash kosong / null / non-64hex ditolak (INVALID_PACKAGE_HASH, 400)
+  // 4. Hash canonical tidak dapat menggantikan raw hash pada commit
+  // 5. File yang byte-nya berubah setelah inspeksi ditolak
   // ---------------------------------------------------------------------------
-  await it('Inspect-JSON alur inspeksi sampai verifikasi hash commit berhasil dengan raw dan canonical hash', async () => {
+  await it('Component Test: Verifikasi ketat raw SHA-256 pada executeImport (tolak hash salah, kosong, canonical, dan file termodifikasi)', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'flowden_hash_verify_'));
     const fkfPath = path.join(tempDir, 'inspected_package.fkf');
 
     const jsonPayload = {
       format: 'flowden-knowledge-format',
       fkf_version: '2.0.0',
-      package_id: 'pkg-hash-test',
+      package_id: 'pkg-hash-strict-proof',
       project: {
-        id: 'proj-hash-test',
-        title: 'Hash Verification Project'
+        id: 'proj-hash-strict-proof',
+        title: 'Strict Hash Verification Test'
       },
       folders: [],
       notes: [
         {
           id: 'n-01',
-          title: 'Hash Note Test',
-          content: 'Testing hash stability.'
+          title: 'Hash Proof Note',
+          content: 'Strict raw hash verification test content.'
         }
       ],
       sources: [],
@@ -402,10 +408,10 @@ async function runIntegrationTests() {
       optional_modules: {}
     };
 
-    fs.writeFileSync(fkfPath, JSON.stringify(jsonPayload), 'utf8');
+    fs.writeFileSync(fkfPath, JSON.stringify(jsonPayload, null, 2), 'utf8');
 
     try {
-      // 1. Inspect
+      // 1. Run actual production package inspection
       const report = await inspectKnowledgePackage({
         zipFilePath: fkfPath,
         originalFilename: 'package.fkf',
@@ -416,40 +422,115 @@ async function runIntegrationTests() {
       assert.strictEqual(report.valid, true);
       const rawSha = report.raw_sha256;
       const canonicalSha = report.canonical_sha256;
-      assert.ok(rawSha, 'Raw hash must exist');
-      assert.ok(canonicalSha, 'Canonical hash must exist');
-      assert.strictEqual(report.package.sha256, rawSha, 'Report package SHA must match raw byte hash');
+      assert.ok(rawSha, 'Raw hash must exist in inspection report');
+      assert.ok(canonicalSha, 'Canonical hash must exist in inspection report');
+      assert.notStrictEqual(rawSha, canonicalSha, 'Raw byte hash must not equal canonical formatted hash');
+      assert.strictEqual(report.package.sha256, rawSha, 'Report package SHA must strictly match raw byte hash');
 
-      // 2. Direct unit test of hash comparison logic in executeImport:
-      const zipBuf = fs.readFileSync(fkfPath);
-      const computedRaw = crypto.createHash('sha256').update(zipBuf).digest('hex');
-      assert.strictEqual(computedRaw, rawSha, 'Computed raw must match report raw_sha256');
+      // 1. Raw hash yang benar diterima oleh fungsi verifikasi produksi:
+      const verifyResult = KnowledgeExchangeService.verifyPackageIntegrity({
+        packageSha256: rawSha,
+        zipFilePath: fkfPath,
+        userId: 1
+      });
+      assert.strictEqual(verifyResult.valid, true, 'verifyPackageIntegrity must validate correct raw hash');
+      assert.strictEqual(verifyResult.computedRawSha256, rawSha, 'computedRawSha256 must match rawSha');
 
-      // 3. Test that corrupted hash is rejected
-      let threwMismatch = false;
+      const dryRunRes = await KnowledgeExchangeService.executeImport({
+        userId: 1,
+        packageSha256: rawSha,
+        zipFilePath: fkfPath,
+        originalFilename: 'package.fkf',
+        destinationProjectId: null,
+        dryRunValidateOnly: true
+      });
+      assert.strictEqual(dryRunRes.success, true, 'executeImport dryRun must succeed with correct raw hash');
+      assert.strictEqual(dryRunRes.packageSha256, rawSha);
+
+      // 2. Hash yang salah ditolak (wrong 64-char hex string):
+      let wrongHashRejected = false;
       try {
-        const badHash = '0000000000000000000000000000000000000000000000000000000000000000';
+        const wrongHash = '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
         await KnowledgeExchangeService.executeImport({
           userId: 1,
-          packageSha256: badHash,
+          packageSha256: wrongHash,
           zipFilePath: fkfPath,
           originalFilename: 'package.fkf',
           destinationProjectId: null
         });
       } catch (err) {
-        threwMismatch = true;
-        assert.strictEqual(err.code, 'PACKAGE_HASH_MISMATCH');
+        wrongHashRejected = true;
+        assert.strictEqual(err.code, 'PACKAGE_HASH_MISMATCH', 'Wrong hash must throw PACKAGE_HASH_MISMATCH');
+        assert.strictEqual(err.status, 422, 'Status must be 422 Unprocessable Entity');
       }
-      assert.strictEqual(threwMismatch, true, 'Mismatched hash must throw PACKAGE_HASH_MISMATCH');
+      assert.strictEqual(wrongHashRejected, true, 'Wrong hash must be rejected with 422');
+
+      // 3. Hash kosong ditolak (null, undefined, '', '   ', invalid non-64hex):
+      const emptyAndInvalidHashes = ['', null, undefined, '   ', 'short-hash', '12345'];
+      for (const invalidVal of emptyAndInvalidHashes) {
+        let invalidRejected = false;
+        try {
+          await KnowledgeExchangeService.executeImport({
+            userId: 1,
+            packageSha256: invalidVal,
+            zipFilePath: fkfPath,
+            originalFilename: 'package.fkf',
+            destinationProjectId: null
+          });
+        } catch (err) {
+          invalidRejected = true;
+          assert.strictEqual(err.code, 'INVALID_PACKAGE_HASH', `Invalid hash "${invalidVal}" must throw INVALID_PACKAGE_HASH`);
+          assert.strictEqual(err.status, 400, 'Status must be 400 Bad Request');
+        }
+        assert.strictEqual(invalidRejected, true, `Invalid/empty hash "${invalidVal}" must be rejected with 400`);
+      }
+
+      // 4. Hash canonical TIDAK DAPAT menggantikan raw hash pada commit:
+      let canonicalRejected = false;
+      try {
+        await KnowledgeExchangeService.executeImport({
+          userId: 1,
+          packageSha256: canonicalSha, // Supplying canonical content hash instead of raw byte hash
+          zipFilePath: fkfPath,
+          originalFilename: 'package.fkf',
+          destinationProjectId: null
+        });
+      } catch (err) {
+        canonicalRejected = true;
+        assert.strictEqual(err.code, 'PACKAGE_HASH_MISMATCH', 'Supplying canonical hash instead of raw hash must throw PACKAGE_HASH_MISMATCH');
+        assert.strictEqual(err.status, 422);
+      }
+      assert.strictEqual(canonicalRejected, true, 'Canonical hash must NOT be accepted as raw file hash');
+
+      // 5. File yang byte-nya berubah setelah inspeksi ditolak:
+      const tamperedPath = path.join(tempDir, 'tampered_package.fkf');
+      fs.copyFileSync(fkfPath, tamperedPath);
+      fs.appendFileSync(tamperedPath, '\n/* altered bytes */', 'utf8');
+
+      let tamperedRejected = false;
+      try {
+        await KnowledgeExchangeService.executeImport({
+          userId: 1,
+          packageSha256: rawSha, // Original inspected raw hash
+          zipFilePath: tamperedPath,
+          originalFilename: 'package.fkf',
+          destinationProjectId: null
+        });
+      } catch (err) {
+        tamperedRejected = true;
+        assert.strictEqual(err.code, 'PACKAGE_HASH_MISMATCH', 'File with altered bytes must throw PACKAGE_HASH_MISMATCH');
+        assert.strictEqual(err.status, 422);
+      }
+      assert.strictEqual(tamperedRejected, true, 'Altered file bytes must be rejected with PACKAGE_HASH_MISMATCH');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
   // ---------------------------------------------------------------------------
-  // Test 7: Schema Alignment for Importer (note_versions, attachments_json)
+  // Test 7: Component Test - Schema Alignment for Importer (note_versions, attachments_json)
   // ---------------------------------------------------------------------------
-  await it('KnowledgeExchangeService executes schema-aligned queries for note_versions and attachments_json', async () => {
+  await it('Component Test: KnowledgeExchangeService query alignment for note_versions (user_id + created_by, content_markdown + content) and attachments_json', async () => {
     const executedQueries = [];
     const mockConn = {
       query: async (sql, params = []) => {
