@@ -160,6 +160,142 @@ function countWords(str) {
  */
 class KnowledgeExchangeService {
   /**
+   * Resolves folder import according to conflict resolution policies:
+   * - link_to_existing: reuses existing matching folder
+   * - skip: skips folder creation and re-maps to parent
+   * - disambiguate: generates a unique name if collision exists
+   */
+  static async resolveFolderConflict(dbOrConn, {
+    userId,
+    targetProjectId,
+    parentDbId,
+    folderName,
+    conflictResolution = 'disambiguate',
+    sortOrder = 0
+  }) {
+    const cleanName = String(folderName || '').trim();
+
+    // Check for existing matching folder in target project
+    const existingFolders = await dbOrConn.query(
+      `SELECT id, name FROM note_folders 
+       WHERE user_id = ? 
+         AND (project_id = ? OR project_id IS NULL)
+         AND (parent_folder_id <=> ?)
+         AND LOWER(name) = LOWER(?)
+       LIMIT 1`,
+      [userId, targetProjectId, parentDbId, cleanName]
+    );
+
+    if (existingFolders && existingFolders.length > 0) {
+      if (conflictResolution === 'link_to_existing') {
+        const ef = existingFolders[0];
+        return {
+          action: 'link_to_existing',
+          folderDbId: ef.id,
+          finalFolderName: ef.name,
+          created: false
+        };
+      } else if (conflictResolution === 'skip') {
+        return {
+          action: 'skip',
+          folderDbId: parentDbId,
+          finalFolderName: 'Skipped',
+          created: false
+        };
+      }
+    }
+
+    // Default: disambiguate name if conflict exists
+    let finalFolderName = cleanName;
+    if (existingFolders && existingFolders.length > 0) {
+      let suffix = 1;
+      while (true) {
+        const candidate = `${cleanName} (${suffix})`;
+        const collision = await dbOrConn.query(
+          `SELECT id FROM note_folders 
+           WHERE user_id = ? 
+             AND (project_id = ? OR project_id IS NULL)
+             AND (parent_folder_id <=> ?)
+             AND LOWER(name) = LOWER(?)
+           LIMIT 1`,
+          [userId, targetProjectId, parentDbId, candidate]
+        );
+        if (!collision || collision.length === 0) {
+          finalFolderName = candidate;
+          break;
+        }
+        suffix++;
+      }
+    }
+
+    const fIns = await dbOrConn.query(
+      `INSERT INTO note_folders (user_id, project_id, parent_folder_id, name, sort_order)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, targetProjectId, parentDbId, finalFolderName, sortOrder]
+    );
+    const folderDbId = fIns.insertId || (fIns[0] && fIns[0].insertId);
+
+    return {
+      action: existingFolders && existingFolders.length > 0 ? 'disambiguate' : 'create',
+      folderDbId,
+      finalFolderName,
+      created: true
+    };
+  }
+
+  /**
+   * Imports semantic relationships from package links into entity_links.
+   * Invariant: origin 'ai_suggested' must have is_confirmed = 0.
+   * Semantic links NEVER insert into note_links.
+   */
+  static async importRelationships(dbOrConn, { userId, links, packageIdMap }) {
+    let createdCount = 0;
+    if (!links || !Array.isArray(links)) return { relationshipCount: 0 };
+
+    for (const link of links) {
+      const source = packageIdMap.get(link.source_id);
+      const target = packageIdMap.get(link.target_id);
+
+      if (source && target) {
+        const validLinkTypes = [
+          'references', 'embeds', 'cites', 'derived_from', 'supports',
+          'contradicts', 'inspired_by', 'depends_on', 'blocks', 'relates_to'
+        ];
+        const finalLinkType = validLinkTypes.includes(link.link_type) ? link.link_type : 'relates_to';
+        const validOrigins = [
+          'manual', 'ai_suggested', 'citation', 'rule_engine', 'system_event', 'template_seed', 'graph_inference', 'task_sync'
+        ];
+        const origin = link.origin && validOrigins.includes(link.origin) ? link.origin : (link.link_type === 'cites' ? 'citation' : 'ai_suggested');
+        const isConfirmed = origin === 'ai_suggested' ? 0 : (link.is_confirmed !== undefined ? (link.is_confirmed ? 1 : 0) : 1);
+        const contextSnippet = link.context_snippet ? String(link.context_snippet).slice(0, 500) : null;
+
+        await dbOrConn.query(
+          `INSERT INTO entity_links (
+            user_id, source_type, source_id, target_type, target_id,
+            link_type, origin, context_snippet, is_confirmed, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+          ON DUPLICATE KEY UPDATE 
+            context_snippet = COALESCE(VALUES(context_snippet), entity_links.context_snippet),
+            updated_at = NOW()`,
+          [
+            userId,
+            source.entityType,
+            source.dbId,
+            target.entityType,
+            target.dbId,
+            finalLinkType,
+            origin,
+            contextSnippet,
+            isConfirmed
+          ]
+        );
+        createdCount += 1;
+      }
+    }
+    return { relationshipCount: createdCount };
+  }
+
+  /**
    * Safe execution of the complete 2-pass transactional import pipeline
    */
   static async executeImport({
@@ -620,73 +756,23 @@ class KnowledgeExchangeService {
           ? packageIdMap.get(f.parent_id).dbId
           : null;
 
-        const folderName = f.name.trim();
+        const resolved = await KnowledgeExchangeService.resolveFolderConflict(conn, {
+          userId,
+          targetProjectId,
+          parentDbId,
+          folderName: f.name,
+          conflictResolution,
+          sortOrder: f.sort_order || 0
+        });
 
-        // Check for existing matching folder in target project
-        const existingFolders = await conn.query(
-          `SELECT id, name FROM note_folders 
-           WHERE user_id = ? 
-             AND (project_id = ? OR project_id IS NULL)
-             AND (parent_folder_id <=> ?)
-             AND LOWER(name) = LOWER(?)
-           LIMIT 1`,
-          [userId, targetProjectId, parentDbId, folderName]
-        );
-
-        if (existingFolders && existingFolders.length > 0) {
-          if (conflictResolution === 'link_to_existing') {
-            const ef = existingFolders[0];
-            packageIdMap.set(f.id, {
-              entityType: 'folder',
-              dbId: ef.id,
-              finalTitle: ef.name
-            });
-            continue;
-          } else if (conflictResolution === 'skip') {
-            packageIdMap.set(f.id, {
-              entityType: 'folder',
-              dbId: parentDbId,
-              finalTitle: 'Skipped'
-            });
-            continue;
-          }
-        }
-
-        // Default: disambiguate name if conflict exists
-        let finalFolderName = folderName;
-        if (existingFolders && existingFolders.length > 0) {
-          let suffix = 1;
-          while (true) {
-            const candidate = `${folderName} (${suffix})`;
-            const collision = await conn.query(
-              `SELECT id FROM note_folders 
-               WHERE user_id = ? 
-                 AND (project_id = ? OR project_id IS NULL)
-                 AND (parent_folder_id <=> ?)
-                 AND LOWER(name) = LOWER(?)
-               LIMIT 1`,
-              [userId, targetProjectId, parentDbId, candidate]
-            );
-            if (!collision || collision.length === 0) {
-              finalFolderName = candidate;
-              break;
-            }
-            suffix++;
-          }
-        }
-
-        const fIns = await conn.query(
-          `INSERT INTO note_folders (user_id, project_id, parent_folder_id, name, sort_order)
-           VALUES (?, ?, ?, ?, ?)`,
-          [userId, targetProjectId, parentDbId, finalFolderName, f.sort_order || 0]
-        );
-        const folderDbId = fIns.insertId || (fIns[0] && fIns[0].insertId);
         packageIdMap.set(f.id, {
           entityType: 'folder',
-          dbId: folderDbId,
-          finalTitle: finalFolderName
+          dbId: resolved.folderDbId,
+          finalTitle: resolved.finalFolderName
         });
-        createdSummary.folder_count += 1;
+        if (resolved.created) {
+          createdSummary.folder_count += 1;
+        }
       }
 
       // 3. Research Sources (research_documents)
@@ -1101,51 +1187,12 @@ class KnowledgeExchangeService {
       }
 
       // 2. Semantic Links (relationships/links.json)
-      if (linksDoc.links && Array.isArray(linksDoc.links)) {
-        for (const link of linksDoc.links) {
-          const source = packageIdMap.get(link.source_id);
-          const target = packageIdMap.get(link.target_id);
-
-          if (source && target) {
-            const validLinkTypes = [
-              'references', 'embeds', 'cites', 'derived_from', 'supports',
-              'contradicts', 'inspired_by', 'depends_on', 'blocks', 'relates_to'
-            ];
-            const finalLinkType = validLinkTypes.includes(link.link_type) ? link.link_type : 'relates_to';
-            const validOrigins = [
-              'manual', 'ai_suggested', 'citation', 'rule_engine', 'system_event', 'template_seed', 'graph_inference', 'task_sync'
-            ];
-            const origin = link.origin && validOrigins.includes(link.origin) ? link.origin : (link.link_type === 'cites' ? 'citation' : 'ai_suggested');
-            // origin 'ai_suggested' must have is_confirmed = 0
-            const isConfirmed = origin === 'ai_suggested' ? 0 : (link.is_confirmed !== undefined ? (link.is_confirmed ? 1 : 0) : 1);
-            const contextSnippet = link.context_snippet ? String(link.context_snippet).slice(0, 500) : null;
-
-            await conn.query(
-              `INSERT INTO entity_links (
-                user_id, source_type, source_id, target_type, target_id,
-                link_type, origin, context_snippet, is_confirmed, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-              ON DUPLICATE KEY UPDATE 
-                context_snippet = COALESCE(VALUES(context_snippet), entity_links.context_snippet),
-                updated_at = NOW()`,
-              [
-                userId,
-                source.entityType,
-                source.dbId,
-                target.entityType,
-                target.dbId,
-                finalLinkType,
-                origin,
-                contextSnippet,
-                isConfirmed
-              ]
-            );
-            createdSummary.relationship_count += 1;
-            // NOTE: Do not insert into note_links from package semantic links.
-            // note_links is strictly reserved for genuine inline Markdown WikiLinks synced via Note.syncWikiLinks().
-          }
-        }
-      }
+      const relResult = await KnowledgeExchangeService.importRelationships(conn, {
+        userId,
+        links: linksDoc.links,
+        packageIdMap
+      });
+      createdSummary.relationship_count += relResult.relationshipCount;
 
       // 3. Optional Spatial Board Projections
       if (boardDoc && boardDoc.board) {

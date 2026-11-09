@@ -141,48 +141,55 @@ function parseFkfDocument(rawInput) {
     };
   }
 
-  // 1. Format check (allow both flowden-knowledge-format and flowden-knowledge-package)
-  const allowedFormats = ['flowden-knowledge-format', 'flowden-knowledge-package'];
-  if (!doc.format || !allowedFormats.includes(doc.format)) {
+  // 1. Format check: FKF 2.0 strictly requires "flowden-knowledge-format"
+  if (doc.format !== 'flowden-knowledge-format') {
     errors.push({
       code: 'UNSUPPORTED_FORMAT',
-      message: `Invalid format: "${doc.format}". Expected "flowden-knowledge-format" or "flowden-knowledge-package".`
+      message: `Invalid format: "${doc.format}". FKF 2.0 requires format: "flowden-knowledge-format".`
     });
   }
 
-  // 2. Version check
-  const version = doc.fkf_version || '2.0.0';
-  if (typeof version !== 'string' || !/^\d+\.\d+\.\d+/.test(version)) {
+  // 2. Version check: FKF 2.0 strictly requires major version 2
+  if (!doc.fkf_version || typeof doc.fkf_version !== 'string' || !/^2\.\d+\.\d+/.test(doc.fkf_version)) {
     errors.push({
-      code: 'INVALID_VERSION',
-      message: `Invalid fkf_version: "${version}". Expected semantic version (e.g., "2.0.0").`
+      code: 'UNSUPPORTED_VERSION',
+      message: `Invalid or missing fkf_version: "${doc.fkf_version}". FKF 2.0 requires a major version 2 semver (e.g., "2.0.0").`
     });
   }
+  const version = doc.fkf_version;
 
-  // 3. Package ID
-  const packageId = doc.package_id || `pkg-${Date.now()}`;
-  if (typeof packageId !== 'string' || !/^[a-z][a-z0-9_-]{2,63}$/i.test(packageId)) {
+  // 3. Package ID: strictly required, do not synthesize
+  if (!doc.package_id || typeof doc.package_id !== 'string' || !/^[a-z][a-z0-9_-]{2,63}$/i.test(doc.package_id)) {
     errors.push({
-      code: 'INVALID_PACKAGE_ID',
-      message: `Invalid package_id: "${packageId}". Must be 3-64 chars (alphanumeric, underscore, hyphen).`
+      code: 'MISSING_PACKAGE_ID',
+      message: `Missing or invalid package_id: "${doc.package_id}". Required 3-64 chars (alphanumeric, underscore, hyphen).`
     });
   }
+  const packageId = doc.package_id;
 
-  // 4. Project
+  // 4. Project: strictly required id and title, do not synthesize
   if (!doc.project || typeof doc.project !== 'object') {
     errors.push({
       code: 'MISSING_PROJECT',
-      message: 'Package must define a "project" object with at least a title.'
+      message: 'Package must define a "project" object with required "id" and "title".'
     });
-  } else if (!doc.project.title || typeof doc.project.title !== 'string' || !doc.project.title.trim()) {
-    errors.push({
-      code: 'MISSING_PROJECT_TITLE',
-      message: 'project.title is required and cannot be empty.'
-    });
+  } else {
+    if (!doc.project.id || typeof doc.project.id !== 'string' || !doc.project.id.trim()) {
+      errors.push({
+        code: 'MISSING_PROJECT_ID',
+        message: 'project.id is required and cannot be empty.'
+      });
+    }
+    if (!doc.project.title || typeof doc.project.title !== 'string' || !doc.project.title.trim()) {
+      errors.push({
+        code: 'MISSING_PROJECT_TITLE',
+        message: 'project.title is required and cannot be empty.'
+      });
+    }
   }
 
-  const projId = (doc.project && doc.project.id) || 'proj-default';
-  const projTitle = doc.project ? doc.project.title.trim() : 'Imported Project';
+  const projId = doc.project ? doc.project.id : null;
+  const projTitle = doc.project && doc.project.title ? doc.project.title.trim() : '';
   const projSummary = doc.project ? (doc.project.summary || doc.project.description || '') : '';
   const projOverview = (doc.project && (doc.project.overview_markdown || doc.project.overview)) || `# ${projTitle}\n\n${projSummary}`;
 
@@ -193,7 +200,11 @@ function parseFkfDocument(rawInput) {
 
   for (let i = 0; i < rawFolders.length; i++) {
     const rf = rawFolders[i];
-    const fid = rf.id || `fld-${i + 1}`;
+    if (!rf.id || typeof rf.id !== 'string' || !rf.id.trim()) {
+      errors.push({ code: 'MISSING_FOLDER_ID', message: `Folder at index ${i} is missing required "id".` });
+      continue;
+    }
+    const fid = rf.id.trim();
     if (folderIdSet.has(fid)) {
       errors.push({ code: 'DUPLICATE_FOLDER_ID', message: `Duplicate folder id: "${fid}".` });
     }
@@ -201,20 +212,31 @@ function parseFkfDocument(rawInput) {
 
     folders.push({
       id: fid,
-      name: rf.name ? String(rf.name).trim() : `Folder ${i + 1}`,
+      name: rf.name ? String(rf.name).trim() : fid,
       parent_id: rf.parent_id || null,
       sort_order: typeof rf.sort_order === 'number' ? rf.sort_order : i
     });
   }
 
-  // 6. Notes (Must strip YAML frontmatter)
+  // 6. Notes: strictly requires at least one valid note, do not synthesize IDs
+  if (!doc.notes || !Array.isArray(doc.notes) || doc.notes.length === 0) {
+    errors.push({
+      code: 'MISSING_NOTES',
+      message: 'FKF 2.0 package must contain at least one valid note in "notes".'
+    });
+  }
+
   const rawNotes = Array.isArray(doc.notes) ? doc.notes : [];
   const notes = [];
   const noteIdSet = new Set();
 
   for (let i = 0; i < rawNotes.length; i++) {
     const rn = rawNotes[i];
-    const nid = rn.id || `note-${i + 1}`;
+    if (!rn.id || typeof rn.id !== 'string' || !rn.id.trim()) {
+      errors.push({ code: 'MISSING_NOTE_ID', message: `Note at index ${i} is missing required "id".` });
+      continue;
+    }
+    const nid = rn.id.trim();
     if (noteIdSet.has(nid)) {
       errors.push({ code: 'DUPLICATE_NOTE_ID', message: `Duplicate note id: "${nid}".` });
     }
@@ -224,7 +246,10 @@ function parseFkfDocument(rawInput) {
     const rawContent = rn.content !== undefined ? rn.content : (rn.content_markdown !== undefined ? rn.content_markdown : '');
     const { frontmatter, body } = stripYamlFrontmatter(rawContent);
 
-    const title = (rn.title || frontmatter.title || `Note ${i + 1}`).trim();
+    const title = (rn.title || frontmatter.title || '').trim();
+    if (!title) {
+      errors.push({ code: 'MISSING_NOTE_TITLE', message: `Note "${nid}" is missing required "title".` });
+    }
     const folderId = rn.folder_id !== undefined ? rn.folder_id : (frontmatter.folder_id || null);
 
     let tags = [];
@@ -236,7 +261,7 @@ function parseFkfDocument(rawInput) {
 
     notes.push({
       id: nid,
-      title,
+      title: title || 'Untitled Note',
       folder_id: folderId || null,
       content_markdown: body,
       is_pinned: Boolean(rn.is_pinned || frontmatter.is_pinned),
@@ -251,7 +276,11 @@ function parseFkfDocument(rawInput) {
 
   for (let i = 0; i < rawSources.length; i++) {
     const rs = rawSources[i];
-    const sid = rs.id || `src-${i + 1}`;
+    if (!rs.id || typeof rs.id !== 'string' || !rs.id.trim()) {
+      errors.push({ code: 'MISSING_SOURCE_ID', message: `Source at index ${i} is missing required "id".` });
+      continue;
+    }
+    const sid = rs.id.trim();
     if (sourceIdSet.has(sid)) {
       errors.push({ code: 'DUPLICATE_SOURCE_ID', message: `Duplicate source id: "${sid}".` });
     }

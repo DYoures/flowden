@@ -2,13 +2,10 @@
  * Flowden FKF 2.0 Integration & Inspection Verification Suite
  *
  * Verifies:
- * 1. Package inspection on a standalone .fkf JSON file
- * 2. Package inspection backward-compatibility on reference .flowden.zip v1 package
- * 3. Folder conflict simulation across all three policies:
- *    - disambiguate (creates "Folder (1)")
- *    - skip (re-maps to parent)
- *    - link_to_existing (reuses existing folder ID)
- * 4. WikiLink sync isolation from semantic relationships
+ * 1. Package inspection on a standalone .fkf JSON file via packageInspectionService
+ * 2. Package inspection backward-compatibility on reference .flowden.zip v1 package (fails if fixture missing)
+ * 3. Folder conflict resolution using the actual KnowledgeExchangeService.resolveFolderConflict() importer method
+ * 4. Semantic relationship import using the actual KnowledgeExchangeService.importRelationships() importer method
  */
 
 const assert = require('assert');
@@ -17,6 +14,7 @@ const path = require('path');
 const os = require('os');
 
 const { inspectKnowledgePackage } = require('../server/services/packageInspectionService');
+const KnowledgeExchangeService = require('../server/services/knowledgeExchangeService');
 
 async function runIntegrationTests() {
   console.log('=== STARTING FKF 2.0 INTEGRATION VERIFICATION ===\n');
@@ -140,9 +138,9 @@ async function runIntegrationTests() {
   });
 
   // ---------------------------------------------------------------------------
-  // Test 2: Inspect reference FKF 1.0 .flowden.zip package (backward compatibility)
+  // Test 2: Inspect reference FKF 1.0 .flowden.zip package (must FAIL if fixture missing)
   // ---------------------------------------------------------------------------
-  await it('inspectKnowledgePackage maintains 100% backward compatibility for .flowden.zip v1', async () => {
+  await it('inspectKnowledgePackage maintains 100% backward compatibility for .flowden.zip v1 (strictly fails if fixture missing)', async () => {
     const refZipPath = path.resolve(
       __dirname,
       '..',
@@ -152,10 +150,11 @@ async function runIntegrationTests() {
       'flowden-reference-package.flowden.zip'
     );
 
-    if (!fs.existsSync(refZipPath)) {
-      console.log('    ⚠️ Reference zip file not found, skipping zip inspection');
-      return;
-    }
+    // Hard assertion: fixture MUST exist; never pass silently or skip
+    assert.ok(
+      fs.existsSync(refZipPath),
+      `CRITICAL: Reference zip fixture must exist at "${refZipPath}". Compatibility test fails if fixture is missing.`
+    );
 
     const report = await inspectKnowledgePackage({
       zipFilePath: refZipPath,
@@ -172,84 +171,142 @@ async function runIntegrationTests() {
   });
 
   // ---------------------------------------------------------------------------
-  // Test 3: Folder conflict policy simulation
+  // Test 3: Actual KnowledgeExchangeService.resolveFolderConflict() importer method
   // ---------------------------------------------------------------------------
-  await it('Folder conflict policies resolve correctly: disambiguate, skip, link_to_existing', async () => {
-    // Simulated database query handler representing existing folders
+  await it('KnowledgeExchangeService.resolveFolderConflict() resolves all policies: disambiguate, skip, link_to_existing', async () => {
     const existingDbFolders = [
-      { id: 101, name: 'Background Research', parent_folder_id: null, project_id: 1 },
-      { id: 102, name: 'Sub-topic', parent_folder_id: 101, project_id: 1 }
+      { id: 101, name: 'Background Research', parent_folder_id: null, project_id: 1 }
     ];
+    const insertedRows = [];
 
-    function resolveFolderConflict(incomingFolder, parentDbId, policy) {
-      const match = existingDbFolders.find(
-        f => f.parent_folder_id === parentDbId && f.name.toLowerCase() === incomingFolder.name.trim().toLowerCase()
-      );
-
-      if (match) {
-        if (policy === 'link_to_existing') {
-          return { action: 'reuse', dbId: match.id, name: match.name };
+    // Recorded spy mock connection
+    const mockConn = {
+      query: async (sql, params = []) => {
+        if (sql.includes('SELECT id, name FROM note_folders') || sql.includes('SELECT id FROM note_folders')) {
+          const nameParam = params[params.length - 1];
+          const parentParam = params[params.length - 2];
+          const match = existingDbFolders.find(
+            f => (f.parent_folder_id === parentParam || (f.parent_folder_id === null && parentParam === null)) &&
+                 f.name.toLowerCase() === String(nameParam).toLowerCase()
+          );
+          return match ? [match] : [];
         }
-        if (policy === 'skip') {
-          return { action: 'skip', dbId: parentDbId, name: 'Skipped' };
+        if (sql.includes('INSERT INTO note_folders')) {
+          const newId = 200 + insertedRows.length;
+          insertedRows.push({ id: newId, sql, params });
+          return { insertId: newId };
         }
-        if (policy === 'disambiguate') {
-          let suffix = 1;
-          let candidate = `${incomingFolder.name.trim()} (${suffix})`;
-          while (existingDbFolders.some(f => f.parent_folder_id === parentDbId && f.name.toLowerCase() === candidate.toLowerCase())) {
-            suffix++;
-            candidate = `${incomingFolder.name.trim()} (${suffix})`;
-          }
-          return { action: 'created', dbId: 999, name: candidate };
-        }
+        return [];
       }
+    };
 
-      return { action: 'created', dbId: 888, name: incomingFolder.name.trim() };
-    }
+    // 1. Policy: link_to_existing (re-use existing folder id 101)
+    const resLink = await KnowledgeExchangeService.resolveFolderConflict(mockConn, {
+      userId: 1,
+      targetProjectId: 1,
+      parentDbId: null,
+      folderName: 'Background Research',
+      conflictResolution: 'link_to_existing'
+    });
+    assert.strictEqual(resLink.action, 'link_to_existing');
+    assert.strictEqual(resLink.folderDbId, 101);
+    assert.strictEqual(resLink.created, false);
 
-    const incoming = { name: 'Background Research' };
-
-    // 1. link_to_existing
-    const resLink = resolveFolderConflict(incoming, null, 'link_to_existing');
-    assert.strictEqual(resLink.action, 'reuse');
-    assert.strictEqual(resLink.dbId, 101);
-
-    // 2. skip
-    const resSkip = resolveFolderConflict(incoming, null, 'skip');
+    // 2. Policy: skip (re-map to parent/root)
+    const resSkip = await KnowledgeExchangeService.resolveFolderConflict(mockConn, {
+      userId: 1,
+      targetProjectId: 1,
+      parentDbId: null,
+      folderName: 'Background Research',
+      conflictResolution: 'skip'
+    });
     assert.strictEqual(resSkip.action, 'skip');
-    assert.strictEqual(resSkip.dbId, null, 'Re-mapped to parent/root');
+    assert.strictEqual(resSkip.folderDbId, null);
+    assert.strictEqual(resSkip.created, false);
 
-    // 3. disambiguate
-    const resDis = resolveFolderConflict(incoming, null, 'disambiguate');
-    assert.strictEqual(resDis.action, 'created');
-    assert.strictEqual(resDis.name, 'Background Research (1)');
+    // 3. Policy: disambiguate (creates "Background Research (1)")
+    const resDis = await KnowledgeExchangeService.resolveFolderConflict(mockConn, {
+      userId: 1,
+      targetProjectId: 1,
+      parentDbId: null,
+      folderName: 'Background Research',
+      conflictResolution: 'disambiguate'
+    });
+    assert.strictEqual(resDis.action, 'disambiguate');
+    assert.strictEqual(resDis.finalFolderName, 'Background Research (1)');
+    assert.strictEqual(resDis.created, true);
+
+    // 4. No collision: creates clean folder
+    const resNew = await KnowledgeExchangeService.resolveFolderConflict(mockConn, {
+      userId: 1,
+      targetProjectId: 1,
+      parentDbId: null,
+      folderName: 'Experimental Labs',
+      conflictResolution: 'disambiguate'
+    });
+    assert.strictEqual(resNew.action, 'create');
+    assert.strictEqual(resNew.finalFolderName, 'Experimental Labs');
+    assert.strictEqual(resNew.created, true);
   });
 
   // ---------------------------------------------------------------------------
-  // Test 4: WikiLinks vs Semantic Links Isolation
+  // Test 4: Actual KnowledgeExchangeService.importRelationships() importer method
   // ---------------------------------------------------------------------------
-  await it('Semantic links never populate note_links; only inline Markdown [[...]] does', () => {
-    // Contract verification:
-    // Package relationships are stored in entity_links.
-    // note_links is only populated when Note.syncWikiLinks parses [[...]] tokens in note body.
-    const packageRelationships = [
-      { source_id: 'note-01', target_id: 'note-02', link_type: 'supports', origin: 'ai_suggested' }
-    ];
-    const markdownContent = '# My Note\nNo wikilinks here, just text.';
+  await it('KnowledgeExchangeService.importRelationships() sets origin ai_suggested with is_confirmed=0 and NEVER writes to note_links', async () => {
+    const executedQueries = [];
+    const mockConn = {
+      query: async (sql, params = []) => {
+        executedQueries.push({ sql, params });
+        return { affectedRows: 1 };
+      }
+    };
 
-    // Extract WikiLinks
-    const wikiLinkRegex = /\[\[(?:note:)?([a-zA-Z0-9_-]+)(?:\|(.*?))?\]\]/g;
-    const foundWikiLinks = [];
-    let match;
-    while ((match = wikiLinkRegex.exec(markdownContent)) !== null) {
-      foundWikiLinks.push(match[1]);
+    const packageIdMap = new Map([
+      ['note-01', { entityType: 'note', dbId: 10, finalTitle: 'Note 1' }],
+      ['note-02', { entityType: 'note', dbId: 11, finalTitle: 'Note 2' }],
+      ['src-01', { entityType: 'research', dbId: 20, finalTitle: 'Source 1' }]
+    ]);
+
+    const links = [
+      {
+        source_id: 'note-01',
+        target_id: 'src-01',
+        link_type: 'cites',
+        origin: 'ai_suggested',
+        context_snippet: 'Found in section 3'
+      },
+      {
+        source_id: 'note-01',
+        target_id: 'note-02',
+        link_type: 'supports',
+        origin: 'ai_suggested',
+        context_snippet: 'Direct evidence'
+      }
+    ];
+
+    const result = await KnowledgeExchangeService.importRelationships(mockConn, {
+      userId: 1,
+      links,
+      packageIdMap
+    });
+
+    assert.strictEqual(result.relationshipCount, 2, 'Must process both links');
+
+    // 1. Verify entity_links queries
+    const entityLinkQueries = executedQueries.filter(q => q.sql.includes('INSERT INTO entity_links'));
+    assert.strictEqual(entityLinkQueries.length, 2, 'Must execute exactly two entity_links insertions');
+
+    for (const q of entityLinkQueries) {
+      // Params index 6: origin, index 8: is_confirmed
+      const originParam = q.params[6];
+      const isConfirmedParam = q.params[8];
+      assert.strictEqual(originParam, 'ai_suggested', 'Origin must be ai_suggested');
+      assert.strictEqual(isConfirmedParam, 0, 'is_confirmed must be 0 for ai_suggested origin');
     }
 
-    assert.strictEqual(foundWikiLinks.length, 0, 'No WikiLinks in markdown');
-    // Entity link exists
-    assert.strictEqual(packageRelationships[0].origin, 'ai_suggested');
-    // Note link count should be 0 because note_links is populated ONLY from foundWikiLinks
-    assert.strictEqual(foundWikiLinks.length, 0, 'note_links row count must remain 0');
+    // 2. Strict Invariant: note_links MUST NEVER be touched by semantic link processing
+    const noteLinkQueries = executedQueries.filter(q => q.sql.includes('note_links'));
+    assert.strictEqual(noteLinkQueries.length, 0, 'CRITICAL: importRelationships() must NEVER execute queries against note_links');
   });
 
   console.log(`\n=== INTEGRATION RESULTS: ${passed} PASSED, ${failed} FAILED ===`);

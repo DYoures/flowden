@@ -123,11 +123,11 @@ async function runTests() {
   });
 
   // ---------------------------------------------------------------------------
-  // Test Group 3: FKF 2.0 Ingress Document Parsing & Robustness
+  // Test Group 3: FKF 2.0 Ingress Document Parsing & Strict Contract
   // ---------------------------------------------------------------------------
   console.log('\n--- Test Group 3: FKF 2.0 Ingress Parsing ---');
 
-  it('Accepts format "flowden-knowledge-format"', () => {
+  it('Accepts strictly compliant format "flowden-knowledge-format"', () => {
     const doc = {
       format: 'flowden-knowledge-format',
       fkf_version: '2.0.0',
@@ -136,13 +136,13 @@ async function runTests() {
       notes: [{ id: 'note-1', title: 'Note 1', content: 'Body 1' }]
     };
     const res = parseFkfDocument(doc);
-    assert.strictEqual(res.valid, true);
+    assert.strictEqual(res.valid, true, `Expected valid: ${JSON.stringify(res.errors)}`);
     assert.strictEqual(res.canonical.package_id, 'pkg-test-01');
     assert.strictEqual(res.canonical.project.title, 'Test Project');
     assert.strictEqual(res.canonical.notes.length, 1);
   });
 
-  it('Accepts format "flowden-knowledge-package"', () => {
+  it('Rejects format "flowden-knowledge-package" in .fkf (strictly requires "flowden-knowledge-format")', () => {
     const doc = {
       format: 'flowden-knowledge-package',
       fkf_version: '2.0.0',
@@ -151,20 +151,93 @@ async function runTests() {
       notes: [{ id: 'note-2', title: 'Note 2', content_markdown: 'Markdown Body' }]
     };
     const res = parseFkfDocument(doc);
-    assert.strictEqual(res.valid, true);
-    assert.strictEqual(res.canonical.notes[0].content_markdown, 'Markdown Body');
+    assert.strictEqual(res.valid, false, 'Must reject flowden-knowledge-package in .fkf');
+    assert.ok(res.errors.some(e => e.code === 'UNSUPPORTED_FORMAT'));
   });
 
-  it('Rejects invalid format', () => {
+  it('Rejects missing or non-major-2 fkf_version', () => {
+    const docMissing = {
+      format: 'flowden-knowledge-format',
+      package_id: 'pkg-v-missing',
+      project: { id: 'proj-1', title: 'Test' },
+      notes: [{ id: 'note-1', title: 'Note 1', content: 'Body' }]
+    };
+    const resMissing = parseFkfDocument(docMissing);
+    assert.strictEqual(resMissing.valid, false);
+    assert.ok(resMissing.errors.some(e => e.code === 'UNSUPPORTED_VERSION'));
+
+    const docV1 = {
+      format: 'flowden-knowledge-format',
+      fkf_version: '1.0.0',
+      package_id: 'pkg-v1',
+      project: { id: 'proj-1', title: 'Test' },
+      notes: [{ id: 'note-1', title: 'Note 1', content: 'Body' }]
+    };
+    const resV1 = parseFkfDocument(docV1);
+    assert.strictEqual(resV1.valid, false);
+    assert.ok(resV1.errors.some(e => e.code === 'UNSUPPORTED_VERSION'));
+  });
+
+  it('Rejects missing package_id without auto-generation', () => {
     const doc = {
-      format: 'invalid-custom-format',
+      format: 'flowden-knowledge-format',
       fkf_version: '2.0.0',
-      package_id: 'pkg-bad',
-      project: { title: 'Bad' }
+      project: { id: 'proj-1', title: 'Test' },
+      notes: [{ id: 'note-1', title: 'Note 1', content: 'Body' }]
     };
     const res = parseFkfDocument(doc);
     assert.strictEqual(res.valid, false);
-    assert.ok(res.errors.some(e => e.code === 'UNSUPPORTED_FORMAT'));
+    assert.ok(res.errors.some(e => e.code === 'MISSING_PACKAGE_ID'));
+  });
+
+  it('Rejects missing project.id or project.title without auto-generation', () => {
+    const docNoPid = {
+      format: 'flowden-knowledge-format',
+      fkf_version: '2.0.0',
+      package_id: 'pkg-no-pid',
+      project: { title: 'Test' },
+      notes: [{ id: 'note-1', title: 'Note 1', content: 'Body' }]
+    };
+    const resNoPid = parseFkfDocument(docNoPid);
+    assert.strictEqual(resNoPid.valid, false);
+    assert.ok(resNoPid.errors.some(e => e.code === 'MISSING_PROJECT_ID'));
+
+    const docNoTitle = {
+      format: 'flowden-knowledge-format',
+      fkf_version: '2.0.0',
+      package_id: 'pkg-no-title',
+      project: { id: 'proj-1' },
+      notes: [{ id: 'note-1', title: 'Note 1', content: 'Body' }]
+    };
+    const resNoTitle = parseFkfDocument(docNoTitle);
+    assert.strictEqual(resNoTitle.valid, false);
+    assert.ok(resNoTitle.errors.some(e => e.code === 'MISSING_PROJECT_TITLE'));
+  });
+
+  it('Rejects empty or missing notes array (requires at least 1 note)', () => {
+    const docEmpty = {
+      format: 'flowden-knowledge-format',
+      fkf_version: '2.0.0',
+      package_id: 'pkg-empty-notes',
+      project: { id: 'proj-1', title: 'Test' },
+      notes: []
+    };
+    const resEmpty = parseFkfDocument(docEmpty);
+    assert.strictEqual(resEmpty.valid, false);
+    assert.ok(resEmpty.errors.some(e => e.code === 'MISSING_NOTES'));
+  });
+
+  it('Rejects notes missing required id without auto-generation', () => {
+    const doc = {
+      format: 'flowden-knowledge-format',
+      fkf_version: '2.0.0',
+      package_id: 'pkg-note-no-id',
+      project: { id: 'proj-1', title: 'Test' },
+      notes: [{ title: 'Note Without ID', content: 'Body' }]
+    };
+    const res = parseFkfDocument(doc);
+    assert.strictEqual(res.valid, false);
+    assert.ok(res.errors.some(e => e.code === 'MISSING_NOTE_ID'));
   });
 
   it('Computes deterministic SHA-256 regardless of JSON key order', () => {
@@ -291,7 +364,7 @@ async function runTests() {
       format: 'flowden-knowledge-format',
       fkf_version: '2.0.0',
       package_id: 'pkg-rel-test',
-      project: { title: 'Rel Project' },
+      project: { id: 'proj-rel-1', title: 'Rel Project' },
       notes: [
         { id: 'note-a', title: 'Note A', content: 'A' },
         { id: 'note-b', title: 'Note B', content: 'B' }
@@ -322,7 +395,7 @@ async function runTests() {
   console.log('\n--- Test Group 7: Migration 007 Structure & Export ---');
 
   it('Migration 007 exports up(conn) function and matches runner regex', () => {
-    const migPath = path.resolve(__dirname, '..', 'server', 'migrations', '007_formalize_security_and_uploads.js');
+    const migPath = path.resolve(__dirname, '..', 'server', 'migrations', '007_note_folders_project_id.js');
     assert.ok(fs.existsSync(migPath), 'Migration 007 file exists');
 
     const filename = path.basename(migPath);
