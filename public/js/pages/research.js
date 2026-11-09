@@ -371,15 +371,12 @@ async function renderResearchPage(container) {
           variant: 'secondary',
           onClick: async (m, inst) => {
             try {
-              // Create a note in Knowledge Vault seeded with this research
-              const res = await window.API.post('/notes', {
-                title: `Research: ${doc.title}`,
-                content: `# ${doc.title}\n\n> Source Document: ${doc.file_name}\n\n## Abstract\n${doc.summary}\n\n## Notes & Synthesis\n\n- Key finding:\n- Reference citation: ${doc.source_url || 'Internal Library'}\n`,
-                project_id: doc.project_id
-              });
-              window.showToast('Note created in Knowledge Vault!', 'success');
+              // Call dedicated bridge endpoint that seeds Vault Note and creates confirmed entity_links entry
+              const res = await window.API.post(`/research/${doc.id}/bridge`);
+              window.showToast('Note created in Knowledge Vault and linked!', 'success');
               inst.close();
-              window.Router.navigate(`/vault?note=${res.note.id}`);
+              const noteId = (res.note && res.note.id) ? res.note.id : res.id;
+              window.Router.navigate(`/vault?note=${noteId}`);
             } catch (err) {
               window.showToast('Failed to bridge note: ' + err.message, 'error');
             }

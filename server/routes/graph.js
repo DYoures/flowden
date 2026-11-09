@@ -1,207 +1,120 @@
 const express = require('express');
 const db = require('../config/database');
 const authenticateToken = require('../middleware/auth');
+const SearchService = require('../services/searchService');
 
 const router = express.Router();
 router.use(authenticateToken);
 
-// GET /api/v1/graph
+// GET /api/v1/graph - Knowledge Graph using Canonical SearchService & Entity Pipeline
 router.get('/', async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { project_id, types } = req.query;
 
-    const allowedTypes = types ? types.split(',').map(t => t.trim().toLowerCase()) : ['note', 'project', 'task', 'research'];
+    const allowedTypes = types
+      ? types.split(',').map(t => t.trim().toLowerCase())
+      : ['note', 'project', 'task', 'research'];
+
+    const activeProjectId = project_id ? parseInt(project_id, 10) : null;
+    const graphOptions = activeProjectId ? { activeProjectId } : {};
+
+    const rawGraph = await SearchService.getGraph(db, userId, graphOptions);
 
     const nodes = [];
     const edges = [];
     const nodeIds = new Set();
 
-    // 1. Projects
-    if (allowedTypes.includes('project')) {
-      let pSql = 'SELECT id, title, color, status FROM projects WHERE user_id = ?';
-      const pParams = [userId];
-      if (project_id) {
-        pSql += ' AND id = ?';
-        pParams.push(parseInt(project_id, 10));
+    // 1. Format Nodes
+    for (const n of (rawGraph.nodes || [])) {
+      if (!allowedTypes.includes(n.entity_type)) continue;
+
+      const rawId = n.entity_id;
+      const type = n.entity_type;
+      const nodeId = `${type}_${rawId}`;
+
+      let color = '#7c5cbf';
+      let radius = 12;
+      let link = `#/${type}`;
+
+      if (type === 'project') {
+        color = '#7c5cbf';
+        radius = 18;
+        link = `#/projects/${rawId}`;
+      } else if (type === 'note') {
+        color = '#5b8fd9';
+        radius = 12;
+        link = `#/vault/${rawId}`;
+      } else if (type === 'task') {
+        color = '#5dba6e';
+        radius = 10;
+        link = `#/workflow`;
+      } else if (type === 'research') {
+        color = '#dba54a';
+        radius = 12;
+        link = `#/research`;
       }
-      const projects = await db.query(pSql, pParams);
-      projects.forEach(p => {
-        const nodeId = `project_${p.id}`;
-        nodes.push({
-          id: nodeId,
-          rawId: p.id,
-          type: 'project',
-          title: p.title,
-          color: p.color || '#7c5cbf',
-          radius: 18,
-          link: `#/projects/${p.id}`
-        });
-        nodeIds.add(nodeId);
+
+      nodes.push({
+        id: nodeId,
+        rawId,
+        type,
+        title: n.title || 'Untitled',
+        color,
+        radius,
+        projectId: n.primary_project_id || null,
+        link
       });
+      nodeIds.add(nodeId);
     }
 
-    // 2. Notes
-    if (allowedTypes.includes('note')) {
-      let nSql = 'SELECT id, title, project_id, folder_id FROM notes WHERE user_id = ?';
-      const nParams = [userId];
-      if (project_id) {
-        nSql += ' AND project_id = ?';
-        nParams.push(parseInt(project_id, 10));
+    // 2. Synthesize 'part_of' Project Edges when entity has primary_project_id and project node exists
+    for (const n of (rawGraph.nodes || [])) {
+      if (!allowedTypes.includes(n.entity_type)) continue;
+      if (n.entity_type === 'project') continue;
+
+      if (n.primary_project_id) {
+        const projNodeId = `project_${n.primary_project_id}`;
+        const entityNodeId = `${n.entity_type}_${n.entity_id}`;
+
+        if (nodeIds.has(projNodeId) && nodeIds.has(entityNodeId)) {
+          const rel = n.entity_type === 'task' ? 'task_of' : (n.entity_type === 'research' ? 'references' : 'part_of');
+          const label = n.entity_type === 'task' ? 'task of' : (n.entity_type === 'research' ? 'references' : 'part of');
+          edges.push({
+            id: `edge_p_${n.primary_project_id}_${n.entity_type}_${n.entity_id}`,
+            source: projNodeId,
+            target: entityNodeId,
+            relationship: rel,
+            label
+          });
+        }
       }
-      const notes = await db.query(nSql, nParams);
-      notes.forEach(n => {
-        const nodeId = `note_${n.id}`;
-        nodes.push({
-          id: nodeId,
-          rawId: n.id,
-          type: 'note',
-          title: n.title,
-          color: '#5b8fd9',
-          radius: 12,
-          projectId: n.project_id,
-          link: `#/vault/${n.id}`
-        });
-        nodeIds.add(nodeId);
-
-        // Edge: note belongs to project
-        if (n.project_id && nodeIds.has(`project_${n.project_id}`)) {
-          edges.push({
-            id: `edge_p_${n.project_id}_n_${n.id}`,
-            source: `project_${n.project_id}`,
-            target: nodeId,
-            relationship: 'part_of',
-            label: 'part of'
-          });
-        }
-      });
-
-      // Wiki Links between notes
-      const links = await db.query('SELECT source_note_id, target_note_id FROM note_links');
-      links.forEach((l, idx) => {
-        const src = `note_${l.source_note_id}`;
-        const tgt = `note_${l.target_note_id}`;
-        if (nodeIds.has(src) && nodeIds.has(tgt)) {
-          edges.push({
-            id: `wiki_link_${idx}_${l.source_note_id}_${l.target_note_id}`,
-            source: src,
-            target: tgt,
-            relationship: 'related_to',
-            label: 'links to'
-          });
-        }
-      });
     }
 
-    // 3. Tasks
-    if (allowedTypes.includes('task')) {
-      let tSql = 'SELECT id, title, project_id, status, priority FROM tasks WHERE user_id = ?';
-      const tParams = [userId];
-      if (project_id) {
-        tSql += ' AND project_id = ?';
-        tParams.push(parseInt(project_id, 10));
+    // 3. Canonical Semantic Edges from entity_links (SearchService.getGraph already filters deleted_at IS NULL and is_confirmed = TRUE)
+    const seenEdgePairs = new Set();
+    for (const el of (rawGraph.edges || [])) {
+      if (el.origin === 'ai_suggested' && !el.is_confirmed) {
+        continue; // Exclude unconfirmed AI edges
       }
-      const tasks = await db.query(tSql, tParams);
-      tasks.forEach(t => {
-        const nodeId = `task_${t.id}`;
-        nodes.push({
-          id: nodeId,
-          rawId: t.id,
-          type: 'task',
-          title: t.title,
-          color: '#5dba6e',
-          radius: 10,
-          projectId: t.project_id,
-          link: `#/workflow`
-        });
-        nodeIds.add(nodeId);
 
-        if (t.project_id && nodeIds.has(`project_${t.project_id}`)) {
-          edges.push({
-            id: `edge_p_${t.project_id}_t_${t.id}`,
-            source: `project_${t.project_id}`,
-            target: nodeId,
-            relationship: 'task_of',
-            label: 'task of'
-          });
-        }
-      });
-    }
-
-    // 4. Research Documents
-    if (allowedTypes.includes('research')) {
-      let rSql = 'SELECT id, title, project_id, file_type FROM research_documents WHERE user_id = ?';
-      const rParams = [userId];
-      if (project_id) {
-        rSql += ' AND project_id = ?';
-        rParams.push(parseInt(project_id, 10));
-      }
-      const research = await db.query(rSql, rParams);
-      research.forEach(r => {
-        const nodeId = `research_${r.id}`;
-        nodes.push({
-          id: nodeId,
-          rawId: r.id,
-          type: 'research',
-          title: r.title,
-          color: '#dba54a',
-          radius: 12,
-          projectId: r.project_id,
-          link: `#/research`
-        });
-        nodeIds.add(nodeId);
-
-        if (r.project_id && nodeIds.has(`project_${r.project_id}`)) {
-          edges.push({
-            id: `edge_p_${r.project_id}_r_${r.id}`,
-            source: `project_${r.project_id}`,
-            target: nodeId,
-            relationship: 'references',
-            label: 'references'
-          });
-        }
-      });
-    }
-
-    // 5. Canonical Semantic Relationships from entity_links
-    const entityLinks = await db.query(
-      'SELECT id, source_type, source_id, target_type, target_id, link_type FROM entity_links WHERE user_id = ? AND deleted_at IS NULL',
-      [userId]
-    );
-    const addedEdgePairs = new Set();
-    entityLinks.forEach(el => {
       const src = `${el.source_type}_${el.source_id}`;
       const tgt = `${el.target_type}_${el.target_id}`;
+
       if (nodeIds.has(src) && nodeIds.has(tgt)) {
-        const pairKey = src < tgt ? `${src}__${tgt}` : `${tgt}__${src}`;
-        addedEdgePairs.add(pairKey);
+        const pairKey = `${src}__${tgt}__${el.link_type}`;
+        if (seenEdgePairs.has(pairKey)) continue;
+        seenEdgePairs.add(pairKey);
+
         edges.push({
-          id: `entity_link_${el.id}`,
+          id: `edge_${el.id}`,
           source: src,
           target: tgt,
           relationship: el.link_type,
-          label: el.link_type.replace(/_/g, ' ')
+          label: String(el.link_type || 'related_to').replace(/_/g, ' ')
         });
       }
-    });
-
-    // 6. Legacy Smart Connections fallback (skip if pair already added by entity_links)
-    const smartConns = await db.query('SELECT * FROM smart_connections WHERE user_id = ?', [userId]);
-    smartConns.forEach(sc => {
-      const src = `${sc.source_type}_${sc.source_id}`;
-      const tgt = `${sc.target_type}_${sc.target_id}`;
-      const pairKey = src < tgt ? `${src}__${tgt}` : `${tgt}__${src}`;
-      if (nodeIds.has(src) && nodeIds.has(tgt) && !addedEdgePairs.has(pairKey)) {
-        addedEdgePairs.add(pairKey);
-        edges.push({
-          id: `smart_conn_${sc.id}`,
-          source: src,
-          target: tgt,
-          relationship: sc.relationship,
-          label: sc.relationship.replace(/_/g, ' ')
-        });
-      }
-    });
+    }
 
     res.json({
       nodes,
@@ -217,4 +130,3 @@ router.get('/', async (req, res, next) => {
 });
 
 module.exports = router;
-

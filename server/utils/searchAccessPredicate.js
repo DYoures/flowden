@@ -87,6 +87,8 @@ function accessPredicate(userId, options = {}) {
     if (includePersonal) {
       params.push(numericUserId); // capture check
       params.push(numericUserId); // personal notes: alias.owner_user_id = ?
+      params.push(activeProjectId); // project entity id
+      params.push(numericUserId); // pm_p.user_id = ?
       params.push(numericUserId); // pm.user_id = ?
       params.push(activeProjectId); // pe.project_id = ?
 
@@ -95,6 +97,12 @@ function accessPredicate(userId, options = {}) {
         AND (${alias}.entity_type <> 'capture' OR ${alias}.owner_user_id = ?)
         AND (
           (${alias}.owner_user_id = ? AND ${alias}.primary_project_id IS NULL)
+          OR (${alias}.entity_type = 'project' AND ${alias}.entity_id = ? AND EXISTS (
+            SELECT 1 FROM project_members pm_p
+            WHERE pm_p.project_id = ${alias}.entity_id
+              AND pm_p.user_id = ?
+              AND pm_p.revoked_at IS NULL
+          ))
           OR EXISTS (
             SELECT 1 FROM project_entities pe
             JOIN project_members pm ON pm.project_id = pe.project_id
@@ -111,22 +119,32 @@ function accessPredicate(userId, options = {}) {
       return { sql, params };
     } else {
       params.push(numericUserId); // capture check
+      params.push(activeProjectId); // project entity id
+      params.push(numericUserId); // pm_p.user_id = ?
       params.push(numericUserId); // pm.user_id = ?
       params.push(activeProjectId); // pe.project_id = ?
 
       const sql = `(
         ${alias}.deleted_at IS NULL
         AND (${alias}.entity_type <> 'capture' OR ${alias}.owner_user_id = ?)
-        AND EXISTS (
-          SELECT 1 FROM project_entities pe
-          JOIN project_members pm ON pm.project_id = pe.project_id
-          WHERE (
-            (pe.entity_type = ${alias}.entity_type AND pe.entity_id = ${alias}.entity_id)
-            OR pe.entity_id = ${alias}.id
+        AND (
+          (${alias}.entity_type = 'project' AND ${alias}.entity_id = ? AND EXISTS (
+            SELECT 1 FROM project_members pm_p
+            WHERE pm_p.project_id = ${alias}.entity_id
+              AND pm_p.user_id = ?
+              AND pm_p.revoked_at IS NULL
+          ))
+          OR EXISTS (
+            SELECT 1 FROM project_entities pe
+            JOIN project_members pm ON pm.project_id = pe.project_id
+            WHERE (
+              (pe.entity_type = ${alias}.entity_type AND pe.entity_id = ${alias}.entity_id)
+              OR pe.entity_id = ${alias}.id
+            )
+              AND pm.user_id = ?
+              AND pm.revoked_at IS NULL
+              AND pe.project_id = ?
           )
-            AND pm.user_id = ?
-            AND pm.revoked_at IS NULL
-            AND pe.project_id = ?
         )
       )`;
       return { sql, params };

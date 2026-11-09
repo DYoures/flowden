@@ -755,26 +755,34 @@ async function registerUploadedFile({
   filePath,
   mimeType,
   fileSize
-}) {
-  try {
-    await db.query(
-      `INSERT INTO file_uploads (user_id, project_id, entity_type, entity_id, filename, original_name, file_path, mime_type, file_size)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), project_id = VALUES(project_id), entity_id = VALUES(entity_id)`,
-      [
-        Number(userId),
-        projectId ? Number(projectId) : null,
-        String(entityType || 'note'),
-        entityId ? Number(entityId) : null,
-        String(filename),
-        String(originalName || filename),
-        String(filePath),
-        String(mimeType || 'application/octet-stream'),
-        Number(fileSize || 0)
-      ]
-    );
-  } catch (err) {
-    // Non-fatal if table is still initializing
+}, dbOrConn = null) {
+  const executor = dbOrConn || db;
+  const insertSql = `
+    INSERT INTO file_uploads (user_id, project_id, entity_type, entity_id, filename, original_name, file_path, mime_type, file_size)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), project_id = VALUES(project_id), entity_id = VALUES(entity_id)
+  `;
+  const insertParams = [
+    Number(userId),
+    projectId ? Number(projectId) : null,
+    String(entityType || 'note'),
+    entityId ? Number(entityId) : null,
+    String(filename),
+    String(originalName || filename),
+    String(filePath),
+    String(mimeType || 'application/octet-stream'),
+    Number(fileSize || 0)
+  ];
+
+  if (dbOrConn) {
+    // Inside caller's transaction: propagate any errors directly
+    await executor.query(insertSql, insertParams);
+  } else {
+    try {
+      await executor.query(insertSql, insertParams);
+    } catch (err) {
+      // Non-fatal if table is still initializing in legacy standalone calls
+    }
   }
 }
 
@@ -799,16 +807,7 @@ async function canUserAccessUploadedFile(userId, relativeUrlPath) {
     if (uploadRows && uploadRows.length > 0) {
       const rec = uploadRows[0];
       if (Number(rec.user_id) === uid) return true;
-      if (rec.project_id) {
-        const projAccess = await db.query(
-          `SELECT 1 FROM projects p
-           LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ? AND pm.revoked_at IS NULL
-           WHERE p.id = ? AND (p.user_id = ? OR pm.id IS NOT NULL)
-           LIMIT 1`,
-          [uid, rec.project_id, uid]
-        );
-        if (projAccess && projAccess.length > 0) return true;
-      }
+
       if (rec.entity_type === 'note' && rec.entity_id) {
         const noteAccess = await db.query(
           `SELECT 1 FROM notes n
@@ -820,20 +819,45 @@ async function canUserAccessUploadedFile(userId, relativeUrlPath) {
           [uid, rec.entity_id, uid]
         );
         if (noteAccess && noteAccess.length > 0) return true;
+        return false;
+      }
+
+      if (rec.entity_type === 'research' && rec.entity_id) {
+        const resAccess = await db.query(
+          `SELECT 1 FROM research_documents r
+           LEFT JOIN project_members pm ON pm.project_id = r.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
+           WHERE r.id = ? AND (r.user_id = ? OR (pm.id IS NOT NULL AND r.deleted_at IS NULL))
+           LIMIT 1`,
+          [uid, rec.entity_id, uid]
+        );
+        if (resAccess && resAccess.length > 0) return true;
+        return false;
+      }
+
+      if (rec.project_id) {
+        const projAccess = await db.query(
+          `SELECT 1 FROM projects p
+           LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ? AND pm.revoked_at IS NULL
+           WHERE p.id = ? AND (p.user_id = ? OR pm.id IS NOT NULL)
+           LIMIT 1`,
+          [uid, rec.project_id, uid]
+        );
+        if (projAccess && projAccess.length > 0) return true;
       }
       return false;
     }
 
-    // 2. Check research_documents by file_name
+    // 2. Check research_documents by file_name or file_path
     if (cleanUrlPath.startsWith('/uploads/research/')) {
       const fname = path.basename(cleanUrlPath);
       const resRows = await db.query(
         `SELECT r.user_id, r.project_id
          FROM research_documents r
          LEFT JOIN project_members pm ON pm.project_id = r.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
-         WHERE r.file_name = ? AND (r.user_id = ? OR pm.id IS NOT NULL)
+         WHERE (r.file_name = ? OR r.file_path = ? OR r.file_path LIKE ?)
+           AND (r.user_id = ? OR (pm.id IS NOT NULL AND r.deleted_at IS NULL))
          LIMIT 1`,
-        [uid, fname, uid]
+        [uid, fname, cleanUrlPath, `%${fname}`, uid]
       );
       if (resRows && resRows.length > 0) return true;
       return false;

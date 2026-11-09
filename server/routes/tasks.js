@@ -11,23 +11,35 @@ router.use(authenticateToken);
 router.get('/', async (req, res, next) => {
   try {
     const { project_id, status, priority, search } = req.query;
-    let sql = 'SELECT * FROM tasks WHERE user_id = ?';
-    const params = [req.user.id];
+    let sql = `
+      SELECT DISTINCT t.*
+      FROM tasks t
+      LEFT JOIN project_entities pe ON pe.entity_type = 'task' AND pe.entity_id = t.id
+      LEFT JOIN project_members pm ON (pm.project_id = t.project_id OR pm.project_id = pe.project_id)
+        AND pm.user_id = ? AND pm.revoked_at IS NULL
+      WHERE (t.user_id = ? OR pm.id IS NOT NULL)
+    `;
+    const params = [req.user.id, req.user.id];
 
     if (project_id) {
-      sql += ' AND project_id = ?';
-      params.push(parseInt(project_id, 10));
+      const pId = parseInt(project_id, 10);
+      const role = await Project.getMemberRole(pId, req.user.id);
+      if (!role) {
+        return res.status(403).json({ error: 'Forbidden: You do not have access to this project.' });
+      }
+      sql += ' AND (t.project_id = ? OR pe.project_id = ?)';
+      params.push(pId, pId);
     }
     if (status) {
-      sql += ' AND status = ?';
+      sql += ' AND t.status = ?';
       params.push(status);
     }
     if (priority) {
-      sql += ' AND priority = ?';
+      sql += ' AND t.priority = ?';
       params.push(priority);
     }
 
-    sql += ' ORDER BY sort_order ASC, created_at DESC';
+    sql += ' ORDER BY t.sort_order ASC, t.created_at DESC';
     let tasks = await db.query(sql, params);
 
     if (search && search.trim()) {
@@ -46,6 +58,7 @@ router.get('/', async (req, res, next) => {
 
 // POST /api/v1/tasks
 router.post('/', async (req, res, next) => {
+  let conn = null;
   try {
     const { title, description, status = 'planned', priority = 'medium', project_id = null, due_date = null } = req.body;
     if (!title || !title.trim()) {
@@ -61,25 +74,56 @@ router.post('/', async (req, res, next) => {
       resolvedProjectId = auth.projectId;
     }
 
-    const result = await db.query(
+    conn = await db.getConnection();
+    await conn.beginTransaction();
+
+    const result = await conn.query(
       'INSERT INTO tasks (user_id, project_id, title, description, status, priority, due_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [req.user.id, resolvedProjectId, title.trim(), description || '', status, priority, due_date || null]
     );
 
-    await EntitySyncService.syncTaskEntity(db, result.insertId, req.user.id);
+    await EntitySyncService.syncTaskEntity(conn, result.insertId, req.user.id);
+    await conn.commit();
+
     const rows = await db.query('SELECT * FROM tasks WHERE id = ? LIMIT 1', [result.insertId]);
     res.status(201).json({ task: rows[0] });
   } catch (err) {
+    if (conn) {
+      try { await conn.rollback(); } catch (_) {}
+    }
     next(err);
+  } finally {
+    if (conn) conn.release();
   }
 });
 
 // PUT /api/v1/tasks/:id
 router.put('/:id', async (req, res, next) => {
+  let conn = null;
   try {
     const { title, description, status, priority, due_date, project_id, sort_order } = req.body;
-    const existing = await db.query('SELECT id FROM tasks WHERE id = ? AND user_id = ? LIMIT 1', [req.params.id, req.user.id]);
-    if (!existing || existing.length === 0) return res.status(404).json({ error: 'Task not found or unauthorized' });
+
+    const existingRows = await db.query(
+      `SELECT DISTINCT t.*
+       FROM tasks t
+       LEFT JOIN project_entities pe ON pe.entity_type = 'task' AND pe.entity_id = t.id
+       LEFT JOIN project_members pm ON (pm.project_id = t.project_id OR pm.project_id = pe.project_id)
+         AND pm.user_id = ? AND pm.revoked_at IS NULL
+       WHERE t.id = ? AND (t.user_id = ? OR pm.id IS NOT NULL)
+       LIMIT 1`,
+      [req.user.id, req.params.id, req.user.id]
+    );
+    if (!existingRows || existingRows.length === 0) return res.status(404).json({ error: 'Task not found or unauthorized' });
+    const existingTask = existingRows[0];
+
+    if (existingTask.project_id) {
+      const canMutate = await Project.hasWriteAccess(existingTask.project_id, req.user.id);
+      if (!canMutate && Number(existingTask.user_id) !== Number(req.user.id)) {
+        return res.status(403).json({ error: 'Forbidden: Viewers cannot mutate tasks' });
+      }
+    } else if (Number(existingTask.user_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: 'Forbidden: Unauthorized task update' });
+    }
 
     const updates = [];
     const params = [];
@@ -109,31 +153,70 @@ router.put('/:id', async (req, res, next) => {
     }
     if (sort_order !== undefined) { updates.push('sort_order = ?'); params.push(sort_order); }
 
+    conn = await db.getConnection();
+    await conn.beginTransaction();
+
     if (updates.length > 0) {
-      params.push(req.user.id);
       params.push(req.params.id);
-      await db.query(`UPDATE tasks SET ${updates.join(', ')} WHERE user_id = ? AND id = ?`, params);
-      await EntitySyncService.syncTaskEntity(db, req.params.id, req.user.id);
+      await conn.query(`UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`, params);
+      await EntitySyncService.syncTaskEntity(conn, req.params.id, req.user.id);
     }
+
+    await conn.commit();
 
     const rows = await db.query('SELECT * FROM tasks WHERE id = ? LIMIT 1', [req.params.id]);
     res.json({ task: rows[0] });
   } catch (err) {
+    if (conn) {
+      try { await conn.rollback(); } catch (_) {}
+    }
     next(err);
+  } finally {
+    if (conn) conn.release();
   }
 });
 
 // DELETE /api/v1/tasks/:id
 router.delete('/:id', async (req, res, next) => {
+  let conn = null;
   try {
-    const existing = await db.query('SELECT id FROM tasks WHERE id = ? AND user_id = ? LIMIT 1', [req.params.id, req.user.id]);
-    if (!existing || existing.length === 0) return res.status(404).json({ error: 'Task not found or unauthorized' });
+    const existingRows = await db.query(
+      `SELECT DISTINCT t.*
+       FROM tasks t
+       LEFT JOIN project_entities pe ON pe.entity_type = 'task' AND pe.entity_id = t.id
+       LEFT JOIN project_members pm ON (pm.project_id = t.project_id OR pm.project_id = pe.project_id)
+         AND pm.user_id = ? AND pm.revoked_at IS NULL
+       WHERE t.id = ? AND (t.user_id = ? OR pm.id IS NOT NULL)
+       LIMIT 1`,
+      [req.user.id, req.params.id, req.user.id]
+    );
+    if (!existingRows || existingRows.length === 0) return res.status(404).json({ error: 'Task not found or unauthorized' });
+    const existingTask = existingRows[0];
 
-    await db.query('DELETE FROM tasks WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
-    await EntitySyncService.deleteTaskEntity(db, req.params.id);
+    if (existingTask.project_id) {
+      const canMutate = await Project.hasWriteAccess(existingTask.project_id, req.user.id);
+      if (!canMutate && Number(existingTask.user_id) !== Number(req.user.id)) {
+        return res.status(403).json({ error: 'Forbidden: Viewers cannot delete tasks' });
+      }
+    } else if (Number(existingTask.user_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: 'Forbidden: Unauthorized task deletion' });
+    }
+
+    conn = await db.getConnection();
+    await conn.beginTransaction();
+
+    await conn.query('DELETE FROM tasks WHERE id = ?', [req.params.id]);
+    await EntitySyncService.deleteTaskEntity(conn, req.params.id);
+
+    await conn.commit();
     res.json({ success: true });
   } catch (err) {
+    if (conn) {
+      try { await conn.rollback(); } catch (_) {}
+    }
     next(err);
+  } finally {
+    if (conn) conn.release();
   }
 });
 

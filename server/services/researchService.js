@@ -1,8 +1,34 @@
 // server/services/researchService.js
 const { canManageSql } = require('../utils/authPredicates');
 
-async function deleteResearchDoc(pool, userId, docId) {
-  const conn = await pool.getConnection();
+function normalizeResult(res) {
+  if (Array.isArray(res) && res.length === 2 && res[1] !== undefined && (res[0] === undefined || res[0]?.constructor?.name === 'ResultSetHeader' || res[0]?.affectedRows !== undefined || Array.isArray(res[0]))) {
+    return res[0];
+  }
+  return res;
+}
+
+function getAffectedRows(res) {
+  const norm = normalizeResult(res);
+  if (norm && typeof norm.affectedRows === 'number') {
+    return norm.affectedRows;
+  }
+  if (Array.isArray(norm) && norm[0] && typeof norm[0].affectedRows === 'number') {
+    return norm[0].affectedRows;
+  }
+  return 0;
+}
+
+function getRows(res) {
+  const norm = normalizeResult(res);
+  if (Array.isArray(norm)) {
+    return norm;
+  }
+  return [];
+}
+
+async function deleteResearchDoc(poolOrDb, userId, docId) {
+  const conn = await poolOrDb.getConnection();
   let destroy = false;
   try {
     await conn.beginTransaction();
@@ -10,32 +36,33 @@ async function deleteResearchDoc(pool, userId, docId) {
     const auth = canManageSql('d', userId, 'research');
 
     // 1) Parent + authorization + affectedRows
-    const [p] = await conn.query(
+    const p = await conn.query(
       `UPDATE research_documents d SET d.deleted_at = ?
         WHERE d.id = ? AND d.deleted_at IS NULL AND ${auth.sql}`,
       [ts, docId, ...auth.params]
     );
-    if (p.affectedRows !== 1) {
+    if (getAffectedRows(p) !== 1) {
       throw new Error('NOT_FOUND_OR_FORBIDDEN');
     }
 
     // Resolve canonical entities row for document
-    const [eRows] = await conn.query(
+    const eRowsRes = await conn.query(
       'SELECT id AS eid FROM entities WHERE entity_type = "research" AND entity_id = ?',
       [docId]
     );
+    const eRows = getRows(eRowsRes);
     const eid = eRows && eRows[0] ? eRows[0].eid : null;
     if (eid) {
-      const [pe] = await conn.query(
+      const pe = await conn.query(
         'UPDATE entities SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL',
         [ts, eid]
       );
-      if (pe.affectedRows !== 1) {
+      if (getAffectedRows(pe) !== 1) {
         throw new Error('ENTITY_DOMAIN_MISMATCH');
       }
     }
 
-    // 2) ACTIVE children only, with provenance marker (marker = docId / eid, reading A)
+    // 2) ACTIVE children only, with provenance marker (marker = docId / eid)
     await conn.query(
       `UPDATE research_excerpts SET deleted_at = ?, cascade_deleted_by = ?
         WHERE research_id = ? AND deleted_at IS NULL`,
@@ -69,36 +96,37 @@ async function deleteResearchDoc(pool, userId, docId) {
     }
     throw e; // Always surface the ORIGINAL error
   } finally {
-    if (destroy) {
+    if (destroy && typeof conn.destroy === 'function') {
       conn.destroy();
-    } else {
+    } else if (typeof conn.release === 'function') {
       conn.release();
     }
   }
 }
 
-async function restoreResearchDoc(pool, userId, docId) {
-  const conn = await pool.getConnection();
+async function restoreResearchDoc(poolOrDb, userId, docId) {
+  const conn = await poolOrDb.getConnection();
   let destroy = false;
   try {
     await conn.beginTransaction();
     const auth = canManageSql('d', userId, 'research');
 
     // 1) Restore root document with authorization + affectedRows
-    const [p] = await conn.query(
+    const p = await conn.query(
       `UPDATE research_documents d SET d.deleted_at = NULL
         WHERE d.id = ? AND d.deleted_at IS NOT NULL AND ${auth.sql}`,
       [docId, ...auth.params]
     );
-    if (p.affectedRows !== 1) {
+    if (getAffectedRows(p) !== 1) {
       throw new Error('NOT_FOUND_OR_FORBIDDEN');
     }
 
     // Restore canonical entities row for document
-    const [eRows] = await conn.query(
+    const eRowsRes = await conn.query(
       'SELECT id AS eid FROM entities WHERE entity_type = "research" AND entity_id = ?',
       [docId]
     );
+    const eRows = getRows(eRowsRes);
     const eid = eRows && eRows[0] ? eRows[0].eid : null;
     if (eid) {
       await conn.query(
@@ -139,9 +167,9 @@ async function restoreResearchDoc(pool, userId, docId) {
     }
     throw e;
   } finally {
-    if (destroy) {
+    if (destroy && typeof conn.destroy === 'function') {
       conn.destroy();
-    } else {
+    } else if (typeof conn.release === 'function') {
       conn.release();
     }
   }
@@ -151,4 +179,3 @@ module.exports = {
   deleteResearchDoc,
   restoreResearchDoc
 };
-

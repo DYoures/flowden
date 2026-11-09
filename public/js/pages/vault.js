@@ -8,6 +8,7 @@ async function renderVaultPage(container, params = {}) {
   const currentRunId = ++vaultPageRunId;
   const getIcon = window.FlowdenIcons ? window.FlowdenIcons.getIcon : () => '';
   const initialNoteId = params.noteId || null;
+  const currentProjectId = params.projectId || null;
 
   // Active state
   let allNotes = [];
@@ -1266,7 +1267,8 @@ async function renderVaultPage(container, params = {}) {
   // --------------------------------------------------------------------------
   async function loadFoldersAndTags() {
     try {
-      const fRes = await window.API.get('/notes/folders');
+      const fUrl = currentProjectId ? `/notes/folders?project_id=${currentProjectId}` : '/notes/folders';
+      const fRes = await window.API.get(fUrl);
       folders = fRes.folders || [];
 
       // Populate folder filter dropdown
@@ -2000,13 +2002,26 @@ async function renderVaultPage(container, params = {}) {
   // --------------------------------------------------------------------------
   // Properties Tab Management
   // --------------------------------------------------------------------------
+  async function refreshPropertiesFolderSelect() {
+    const noteFolderSelect = document.getElementById('note-folder-select');
+    if (!noteFolderSelect || !activeNote) return;
+    try {
+      const q = activeNote.project_id ? `?project_id=${activeNote.project_id}` : '';
+      const fRes = await window.API.get(`/notes/folders${q}`);
+      const fList = fRes.folders || [];
+      let pSelectHtml = `<option value="">(None - Uncategorized)</option>`;
+      fList.forEach(f => {
+        pSelectHtml += `<option value="${f.id}">${escapeHtml(f.name)}</option>`;
+      });
+      noteFolderSelect.innerHTML = pSelectHtml;
+      noteFolderSelect.value = activeNote.folder_id || '';
+    } catch (_) {}
+  }
+
   function renderProperties() {
     if (!activeNote) return;
 
-    const noteFolderSelect = document.getElementById('note-folder-select');
-    if (noteFolderSelect) {
-      noteFolderSelect.value = activeNote.folder_id || '';
-    }
+    refreshPropertiesFolderSelect();
 
     const pinToggle = document.getElementById('note-pin-toggle');
     if (pinToggle) {
@@ -2865,9 +2880,15 @@ async function renderVaultPage(container, params = {}) {
       onConfirm: async (name) => {
         if (!name || !name.trim()) return;
         try {
-          await window.API.post('/notes/folders', { name: name.trim() });
+          const payload = { name: name.trim() };
+          const targetProjId = (activeNote && activeNote.project_id) || currentProjectId;
+          if (targetProjId) {
+            payload.project_id = targetProjId;
+          }
+          await window.API.post('/notes/folders', payload);
           window.showToast('Folder created', 'success');
           await loadFoldersAndTags();
+          if (activeNote) await refreshPropertiesFolderSelect();
         } catch (err) {
           window.showToast('Failed to create folder: ' + err.message, 'error');
         }

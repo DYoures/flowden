@@ -464,7 +464,7 @@ router.post('/url-metadata', handleUrlMetadata);
 // GET /api/v1/notes/folders
 router.get('/folders', async (req, res, next) => {
   try {
-    const folders = await Note.getFolders(req.user.id);
+    const folders = await Note.getFolders(req.user.id, req.query.project_id);
     res.json({ folders });
   } catch (err) {
     next(err);
@@ -474,10 +474,26 @@ router.get('/folders', async (req, res, next) => {
 // POST /api/v1/notes/folders
 router.post('/folders', async (req, res, next) => {
   try {
-    const { name, parent_folder_id } = req.body;
-    const folder = await Note.createFolder(req.user.id, name, parent_folder_id);
+    const { name, parent_folder_id, project_id } = req.body;
+    const folder = await Note.createFolder(req.user.id, name, parent_folder_id, project_id);
     res.status(201).json({ folder });
   } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+// PUT /api/v1/notes/folders/:id
+router.put('/folders/:id', async (req, res, next) => {
+  try {
+    const folder = await Note.updateFolder(req.params.id, req.user.id, req.body);
+    res.json({ folder });
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
     next(err);
   }
 });
@@ -488,6 +504,9 @@ router.delete('/folders/:id', async (req, res, next) => {
     await Note.deleteFolder(req.params.id, req.user.id);
     res.json({ success: true });
   } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
     next(err);
   }
 });
@@ -539,7 +558,6 @@ router.post('/', async (req, res, next) => {
       }
     }
     const note = await Note.create(req.user.id, req.body);
-    await EntitySyncService.syncNoteEntity(db, note.id, req.user.id);
     res.status(201).json({ note });
   } catch (err) {
     if (err.status) {
@@ -577,7 +595,6 @@ router.post('/import', async (req, res, next) => {
       folder_id,
       tags: tags || []
     });
-    await EntitySyncService.syncNoteEntity(db, note.id, req.user.id);
 
     res.status(201).json({ message: 'Note imported successfully', note });
   } catch (err) {
@@ -629,7 +646,6 @@ router.put('/:id', async (req, res, next) => {
     if (!note) {
       return res.status(404).json({ error: 'Note not found or unauthorized' });
     }
-    await EntitySyncService.syncNoteEntity(db, note.id, req.user.id);
     res.json({ note });
   } catch (err) {
     if (err.status) {

@@ -862,7 +862,8 @@ class KnowledgeExchangeService {
           const cleanRel = contentRelPath.replace(/^\/+/, '');
           const srcStagePath = path.resolve(stageDir, cleanRel);
           let rawSourceMd = '';
-          if (fs.existsSync(srcStagePath)) {
+          const hasPhysicalFile = fs.existsSync(srcStagePath);
+          if (hasPhysicalFile) {
             rawSourceMd = fs.readFileSync(srcStagePath, 'utf8');
           }
 
@@ -881,19 +882,26 @@ class KnowledgeExchangeService {
           const cleanSourceUrl = s.source_url ? s.source_url.trim().slice(0, 1000) : null;
           const tagsJson = JSON.stringify(s.tags || []);
 
+          const originalFilename = hasPhysicalFile ? path.basename(contentRelPath) : (s.original_filename || null);
+          const fileName = hasPhysicalFile ? path.basename(contentRelPath) : null;
+          const filePath = hasPhysicalFile ? `/sources/${path.basename(contentRelPath)}` : null;
+          const fileType = hasPhysicalFile ? (s.file_type || 'md') : (s.file_type || null);
+          const fileSize = hasPhysicalFile ? Buffer.byteLength(finalSourceText, 'utf8') : 0;
+
           const srcIns = await conn.query(
             `INSERT INTO research_documents (
               user_id, project_id, title, original_filename, file_name, file_path,
               file_type, file_size, content_text, summary, source_url, tags_json
-            ) VALUES (?, ?, ?, ?, ?, ?, 'md', ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               userId,
               targetProjectId,
               s.title.trim(),
-              path.basename(contentRelPath),
-              path.basename(contentRelPath),
-              `/sources/${path.basename(contentRelPath)}`,
-              Buffer.byteLength(finalSourceText, 'utf8'),
+              originalFilename,
+              fileName,
+              filePath,
+              fileType,
+              fileSize,
               finalSourceText,
               s.summary || null,
               cleanSourceUrl,
