@@ -16,14 +16,14 @@
  */
 function canManageSql(alias, userId, entityType = 'research') {
   const sql = `(
-    ${alias}.user_id = ?
-    OR EXISTS (
+    (${alias}.project_id IS NULL AND ${alias}.user_id = ?)
+    OR (${alias}.project_id IS NOT NULL AND EXISTS (
       SELECT 1 FROM project_members pm
        WHERE pm.project_id = ${alias}.project_id
          AND pm.user_id = ?
          AND pm.role IN ('owner', 'editor')
          AND pm.revoked_at IS NULL
-    )
+    ))
     OR EXISTS (
       SELECT 1 FROM project_entities pe
        WHERE pe.project_id = ${alias}.project_id
@@ -34,6 +34,7 @@ function canManageSql(alias, userId, entityType = 'research') {
            SELECT 1 FROM project_members pm2
             WHERE pm2.project_id = pe.project_id
               AND pm2.user_id = ?
+              AND pm2.role IN ('owner', 'editor')
               AND pm2.revoked_at IS NULL
          )
     )

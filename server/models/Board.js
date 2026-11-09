@@ -68,98 +68,270 @@ class Board {
     return { allowed: false, canMutate: false, role: 'none', board: null };
   }
 
+  static async validateAndResolveReference(board, referenceType, referenceId) {
+    if (!referenceType || !referenceId) {
+      return { referenceId: null, title: null, content: null };
+    }
+
+    const refId = parseInt(referenceId, 10);
+    if (!refId) {
+      const err = new Error('Invalid reference id');
+      err.status = 400;
+      throw err;
+    }
+
+    if (board.project_id) {
+      const pid = Number(board.project_id);
+      if (referenceType === 'note') {
+        const rows = await db.query(
+          `SELECT n.id, n.title, n.content
+           FROM notes n
+           LEFT JOIN project_entities pe ON pe.entity_type = 'note' AND pe.entity_id = n.id
+           WHERE n.id = ? AND n.deleted_at IS NULL AND (n.project_id = ? OR pe.project_id = ?)
+           LIMIT 1`,
+          [refId, pid, pid]
+        );
+        if (!rows || rows.length === 0) {
+          const err = new Error('Referenced note does not belong to this project');
+          err.status = 400;
+          throw err;
+        }
+        return {
+          referenceId: rows[0].id,
+          title: rows[0].title,
+          content: stripMarkdown(rows[0].content).slice(0, 200)
+        };
+      }
+
+      if (referenceType === 'task') {
+        const rows = await db.query(
+          `SELECT t.id, t.title, t.description
+           FROM tasks t
+           LEFT JOIN project_entities pe ON pe.entity_type = 'task' AND pe.entity_id = t.id
+           WHERE t.id = ? AND (t.project_id = ? OR pe.project_id = ?)
+           LIMIT 1`,
+          [refId, pid, pid]
+        );
+        if (!rows || rows.length === 0) {
+          const err = new Error('Referenced task does not belong to this project');
+          err.status = 400;
+          throw err;
+        }
+        return {
+          referenceId: rows[0].id,
+          title: rows[0].title,
+          content: stripMarkdown(rows[0].description).slice(0, 200)
+        };
+      }
+
+      if (referenceType === 'research') {
+        const rows = await db.query(
+          `SELECT r.id, r.title, r.summary, r.content_text
+           FROM research_documents r
+           LEFT JOIN project_entities pe ON pe.entity_type = 'research' AND pe.entity_id = r.id
+           WHERE r.id = ? AND r.deleted_at IS NULL AND (r.project_id = ? OR pe.project_id = ?)
+           LIMIT 1`,
+          [refId, pid, pid]
+        );
+        if (!rows || rows.length === 0) {
+          const err = new Error('Referenced research document does not belong to this project');
+          err.status = 400;
+          throw err;
+        }
+        return {
+          referenceId: rows[0].id,
+          title: rows[0].title,
+          content: stripMarkdown(rows[0].summary || rows[0].content_text).slice(0, 200)
+        };
+      }
+
+      const err = new Error(`Unsupported reference type: ${referenceType}`);
+      err.status = 400;
+      throw err;
+    }
+
+    // Personal board (project_id IS NULL)
+    const boardOwnerId = Number(board.user_id);
+    if (referenceType === 'note') {
+      const rows = await db.query(
+        'SELECT id, title, content FROM notes WHERE id = ? AND deleted_at IS NULL AND project_id IS NULL AND user_id = ? LIMIT 1',
+        [refId, boardOwnerId]
+      );
+      if (!rows || rows.length === 0) {
+        const err = new Error('Referenced note does not belong to personal workspace');
+        err.status = 400;
+        throw err;
+      }
+      return {
+        referenceId: rows[0].id,
+        title: rows[0].title,
+        content: stripMarkdown(rows[0].content).slice(0, 200)
+      };
+    }
+
+    if (referenceType === 'task') {
+      const rows = await db.query(
+        'SELECT id, title, description FROM tasks WHERE id = ? AND project_id IS NULL AND user_id = ? LIMIT 1',
+        [refId, boardOwnerId]
+      );
+      if (!rows || rows.length === 0) {
+        const err = new Error('Referenced task does not belong to personal workspace');
+        err.status = 400;
+        throw err;
+      }
+      return {
+        referenceId: rows[0].id,
+        title: rows[0].title,
+        content: stripMarkdown(rows[0].description).slice(0, 200)
+      };
+    }
+
+    if (referenceType === 'research') {
+      const rows = await db.query(
+        'SELECT id, title, summary, content_text FROM research_documents WHERE id = ? AND deleted_at IS NULL AND project_id IS NULL AND user_id = ? LIMIT 1',
+        [refId, boardOwnerId]
+      );
+      if (!rows || rows.length === 0) {
+        const err = new Error('Referenced research document does not belong to personal workspace');
+        err.status = 400;
+        throw err;
+      }
+      return {
+        referenceId: rows[0].id,
+        title: rows[0].title,
+        content: stripMarkdown(rows[0].summary || rows[0].content_text).slice(0, 200)
+      };
+    }
+
+    const err = new Error(`Unsupported reference type: ${referenceType}`);
+    err.status = 400;
+    throw err;
+  }
+
   static async enrichItem(item, userId, boardProjectId = null) {
     if (!item) return item;
     const uid = Number(userId);
 
     if (item.reference_type === 'note' && item.reference_id) {
-      const nRows = await db.query(
-        `SELECT n.id, n.title, n.content, n.project_id, n.user_id
-         FROM notes n
-         LEFT JOIN project_members pm ON pm.project_id = n.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
-         WHERE n.id = ? AND n.deleted_at IS NULL AND (n.user_id = ? OR pm.id IS NOT NULL)
-         LIMIT 1`,
-        [uid, item.reference_id, uid]
-      );
-
-      if (nRows && nRows[0]) {
-        const note = nRows[0];
-        if (boardProjectId && note.project_id && Number(note.project_id) !== Number(boardProjectId) && Number(note.user_id) !== uid) {
+      if (boardProjectId) {
+        const pid = Number(boardProjectId);
+        const nRows = await db.query(
+          `SELECT n.id, n.title, n.content
+           FROM notes n
+           LEFT JOIN project_entities pe ON pe.entity_type = 'note' AND pe.entity_id = n.id
+           WHERE n.id = ? AND n.deleted_at IS NULL AND (n.project_id = ? OR pe.project_id = ?)
+           LIMIT 1`,
+          [item.reference_id, pid, pid]
+        );
+        if (nRows && nRows[0]) {
+          item.title = nRows[0].title;
+          item.content = stripMarkdown(nRows[0].content).slice(0, 200);
+          item.is_projection = true;
+          item.is_available = true;
+        } else {
           item.title = 'Unavailable Reference';
           item.content = 'Referenced content is unavailable or private.';
           item.is_projection = true;
           item.is_available = false;
-        } else {
-          item.title = note.title;
-          item.content = stripMarkdown(note.content).slice(0, 200);
-          item.is_projection = true;
-          item.is_available = true;
         }
       } else {
-        item.title = 'Unavailable Reference';
-        item.content = 'Referenced content is unavailable or private.';
-        item.is_projection = true;
-        item.is_available = false;
+        const nRows = await db.query(
+          'SELECT n.id, n.title, n.content FROM notes n WHERE n.id = ? AND n.deleted_at IS NULL AND n.project_id IS NULL AND n.user_id = ? LIMIT 1',
+          [item.reference_id, uid]
+        );
+        if (nRows && nRows[0]) {
+          item.title = nRows[0].title;
+          item.content = stripMarkdown(nRows[0].content).slice(0, 200);
+          item.is_projection = true;
+          item.is_available = true;
+        } else {
+          item.title = 'Unavailable Reference';
+          item.content = 'Referenced content is unavailable or private.';
+          item.is_projection = true;
+          item.is_available = false;
+        }
       }
     } else if (item.reference_type === 'task' && item.reference_id) {
-      const tRows = await db.query(
-        `SELECT t.id, t.title, t.description, t.status, t.priority, t.project_id, t.user_id
-         FROM tasks t
-         LEFT JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
-         WHERE t.id = ? AND (t.user_id = ? OR pm.id IS NOT NULL)
-         LIMIT 1`,
-        [uid, item.reference_id, uid]
-      );
-
-      if (tRows && tRows[0]) {
-        const task = tRows[0];
-        if (boardProjectId && task.project_id && Number(task.project_id) !== Number(boardProjectId) && Number(task.user_id) !== uid) {
+      if (boardProjectId) {
+        const pid = Number(boardProjectId);
+        const tRows = await db.query(
+          `SELECT t.id, t.title, t.description, t.status, t.priority
+           FROM tasks t
+           LEFT JOIN project_entities pe ON pe.entity_type = 'task' AND pe.entity_id = t.id
+           WHERE t.id = ? AND (t.project_id = ? OR pe.project_id = ?)
+           LIMIT 1`,
+          [item.reference_id, pid, pid]
+        );
+        if (tRows && tRows[0]) {
+          item.title = tRows[0].title;
+          item.content = stripMarkdown(tRows[0].description).slice(0, 200);
+          item.status = tRows[0].status;
+          item.priority = tRows[0].priority;
+          item.is_projection = true;
+          item.is_available = true;
+        } else {
           item.title = 'Unavailable Reference';
           item.content = 'Referenced content is unavailable or private.';
           item.is_projection = true;
           item.is_available = false;
-        } else {
-          item.title = task.title;
-          item.content = stripMarkdown(task.description).slice(0, 200);
-          item.status = task.status;
-          item.priority = task.priority;
-          item.is_projection = true;
-          item.is_available = true;
         }
       } else {
-        item.title = 'Unavailable Reference';
-        item.content = 'Referenced content is unavailable or private.';
-        item.is_projection = true;
-        item.is_available = false;
+        const tRows = await db.query(
+          'SELECT t.id, t.title, t.description, t.status, t.priority FROM tasks t WHERE t.id = ? AND t.project_id IS NULL AND t.user_id = ? LIMIT 1',
+          [item.reference_id, uid]
+        );
+        if (tRows && tRows[0]) {
+          item.title = tRows[0].title;
+          item.content = stripMarkdown(tRows[0].description).slice(0, 200);
+          item.status = tRows[0].status;
+          item.priority = tRows[0].priority;
+          item.is_projection = true;
+          item.is_available = true;
+        } else {
+          item.title = 'Unavailable Reference';
+          item.content = 'Referenced content is unavailable or private.';
+          item.is_projection = true;
+          item.is_available = false;
+        }
       }
     } else if (item.reference_type === 'research' && item.reference_id) {
-      const rRows = await db.query(
-        `SELECT r.id, r.title, r.summary, r.content_text, r.project_id, r.user_id
-         FROM research_documents r
-         LEFT JOIN project_members pm ON pm.project_id = r.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
-         WHERE r.id = ? AND r.deleted_at IS NULL AND (r.user_id = ? OR pm.id IS NOT NULL)
-         LIMIT 1`,
-        [uid, item.reference_id, uid]
-      );
-
-      if (rRows && rRows[0]) {
-        const doc = rRows[0];
-        if (boardProjectId && doc.project_id && Number(doc.project_id) !== Number(boardProjectId) && Number(doc.user_id) !== uid) {
+      if (boardProjectId) {
+        const pid = Number(boardProjectId);
+        const rRows = await db.query(
+          `SELECT r.id, r.title, r.summary, r.content_text
+           FROM research_documents r
+           LEFT JOIN project_entities pe ON pe.entity_type = 'research' AND pe.entity_id = r.id
+           WHERE r.id = ? AND r.deleted_at IS NULL AND (r.project_id = ? OR pe.project_id = ?)
+           LIMIT 1`,
+          [item.reference_id, pid, pid]
+        );
+        if (rRows && rRows[0]) {
+          item.title = rRows[0].title;
+          item.content = stripMarkdown(rRows[0].summary || rRows[0].content_text).slice(0, 200);
+          item.is_projection = true;
+          item.is_available = true;
+        } else {
           item.title = 'Unavailable Reference';
           item.content = 'Referenced content is unavailable or private.';
           item.is_projection = true;
           item.is_available = false;
-        } else {
-          item.title = doc.title;
-          item.content = stripMarkdown(doc.summary || doc.content_text).slice(0, 200);
-          item.is_projection = true;
-          item.is_available = true;
         }
       } else {
-        item.title = 'Unavailable Reference';
-        item.content = 'Referenced content is unavailable or private.';
-        item.is_projection = true;
-        item.is_available = false;
+        const rRows = await db.query(
+          'SELECT r.id, r.title, r.summary, r.content_text FROM research_documents r WHERE r.id = ? AND r.deleted_at IS NULL AND r.project_id IS NULL AND r.user_id = ? LIMIT 1',
+          [item.reference_id, uid]
+        );
+        if (rRows && rRows[0]) {
+          item.title = rRows[0].title;
+          item.content = stripMarkdown(rRows[0].summary || rRows[0].content_text).slice(0, 200);
+          item.is_projection = true;
+          item.is_available = true;
+        } else {
+          item.title = 'Unavailable Reference';
+          item.content = 'Referenced content is unavailable or private.';
+          item.is_projection = true;
+          item.is_available = false;
+        }
       }
     }
     return item;
@@ -275,45 +447,14 @@ class Board {
     let finalContent = content ? stripMarkdown(content).slice(0, 200) : '';
     let safeReferenceId = reference_id;
 
-    if (reference_type === 'note' && reference_id) {
-      const nRows = await db.query(
-        `SELECT n.id, n.title, n.content, n.project_id, n.user_id
-         FROM notes n
-         LEFT JOIN project_members pm ON pm.project_id = n.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
-         WHERE n.id = ? AND n.deleted_at IS NULL AND (n.user_id = ? OR pm.id IS NOT NULL)
-         LIMIT 1`,
-        [userId, reference_id, userId]
-      );
-      if (nRows && nRows[0]) {
-        const note = nRows[0];
-        if (board.project_id && note.project_id && Number(note.project_id) !== Number(board.project_id) && Number(note.user_id) !== Number(userId)) {
-          safeReferenceId = null;
-        } else {
-          finalTitle = note.title;
-          finalContent = stripMarkdown(note.content).slice(0, 200);
-        }
-      } else {
-        safeReferenceId = null;
+    if (reference_type && reference_id) {
+      const resolved = await this.validateAndResolveReference(board, reference_type, reference_id);
+      safeReferenceId = resolved.referenceId;
+      if (!title && resolved.title) {
+        finalTitle = resolved.title;
       }
-    } else if (reference_type === 'task' && reference_id) {
-      const tRows = await db.query(
-        `SELECT t.id, t.title, t.description, t.project_id, t.user_id
-         FROM tasks t
-         LEFT JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
-         WHERE t.id = ? AND (t.user_id = ? OR pm.id IS NOT NULL)
-         LIMIT 1`,
-        [userId, reference_id, userId]
-      );
-      if (tRows && tRows[0]) {
-        const task = tRows[0];
-        if (board.project_id && task.project_id && Number(task.project_id) !== Number(board.project_id) && Number(task.user_id) !== Number(userId)) {
-          safeReferenceId = null;
-        } else {
-          finalTitle = task.title;
-          finalContent = stripMarkdown(task.description).slice(0, 200);
-        }
-      } else {
-        safeReferenceId = null;
+      if (!content && resolved.content) {
+        finalContent = resolved.content;
       }
     }
 
@@ -339,11 +480,19 @@ class Board {
       throw err;
     }
 
-    const itemRows = await db.query('SELECT id FROM board_items WHERE id = ? AND board_id = ? LIMIT 1', [itemId, boardId]);
+    const itemRows = await db.query('SELECT * FROM board_items WHERE id = ? AND board_id = ? LIMIT 1', [itemId, boardId]);
     if (!itemRows || itemRows.length === 0) {
       const err = new Error('Item not found or unauthorized');
       err.status = 404;
       throw err;
+    }
+    const currentItem = itemRows[0];
+
+    // If reference_type or reference_id is being updated, validate against board scope
+    const targetRefType = data.reference_type !== undefined ? data.reference_type : currentItem.reference_type;
+    const targetRefId = data.reference_id !== undefined ? data.reference_id : currentItem.reference_id;
+    if (targetRefType && targetRefId) {
+      await this.validateAndResolveReference(access.board, targetRefType, targetRefId);
     }
 
     const updates = [];

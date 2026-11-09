@@ -13,7 +13,7 @@ class Note {
       LEFT JOIN project_members pm ON (pm.project_id = n.project_id OR pm.project_id = pe.project_id)
         AND pm.user_id = ? AND pm.revoked_at IS NULL
       WHERE n.deleted_at IS NULL
-        AND (n.user_id = ? OR pm.id IS NOT NULL)
+        AND ((n.project_id IS NULL AND n.user_id = ?) OR pm.id IS NOT NULL)
     `;
     const params = [userId, userId];
 
@@ -75,8 +75,9 @@ class Note {
     return notes;
   }
 
-  static async findById(id, userId) {
-    const rows = await db.query(
+  static async findById(id, userId, dbOrConn = null) {
+    const executor = dbOrConn || db;
+    const rows = await executor.query(
       `SELECT DISTINCT n.*
        FROM notes n
        LEFT JOIN project_entities pe ON pe.entity_type = 'note' AND pe.entity_id = n.id
@@ -84,7 +85,7 @@ class Note {
          AND pm.user_id = ? AND pm.revoked_at IS NULL
        WHERE n.id = ?
          AND n.deleted_at IS NULL
-         AND (n.user_id = ? OR pm.id IS NOT NULL)
+         AND ((n.project_id IS NULL AND n.user_id = ?) OR pm.id IS NOT NULL)
        LIMIT 1`,
       [userId, id, userId]
     );
@@ -92,14 +93,14 @@ class Note {
     const note = rows[0];
 
     // Get tags
-    const allTags = await db.query('SELECT * FROM note_tags WHERE user_id = ?', [note.user_id]);
-    const tagMaps = await db.query('SELECT * FROM note_tag_map WHERE note_id = ?', [id]);
+    const allTags = await executor.query('SELECT * FROM note_tags WHERE user_id = ?', [note.user_id]);
+    const tagMaps = await executor.query('SELECT * FROM note_tag_map WHERE note_id = ?', [id]);
     const tagMapById = new Map(allTags.map(t => [t.id, t]));
     note.tags = tagMaps.map(tm => tagMapById.get(tm.tag_id)).filter(Boolean);
 
     // Helper to ensure linked notes are accessible to userId before returning
     const findAccessibleLinkedNote = async (linkedNoteId) => {
-      const targetRows = await db.query(
+      const targetRows = await executor.query(
         `SELECT DISTINCT n.id, n.title, n.updated_at
          FROM notes n
          LEFT JOIN project_entities pe ON pe.entity_type = 'note' AND pe.entity_id = n.id
@@ -107,7 +108,7 @@ class Note {
            AND pm.user_id = ? AND pm.revoked_at IS NULL
          WHERE n.id = ?
            AND n.deleted_at IS NULL
-           AND (n.user_id = ? OR pm.id IS NOT NULL)
+           AND ((n.project_id IS NULL AND n.user_id = ?) OR pm.id IS NOT NULL)
          LIMIT 1`,
         [userId, linkedNoteId, userId]
       );
@@ -115,7 +116,7 @@ class Note {
     };
 
     // Outgoing links (strictly filtered by access)
-    const outgoingLinks = await db.query('SELECT target_note_id FROM note_links WHERE source_note_id = ?', [id]);
+    const outgoingLinks = await executor.query('SELECT target_note_id FROM note_links WHERE source_note_id = ?', [id]);
     const targetIds = outgoingLinks.map(l => l.target_note_id);
     const targetNotes = [];
     for (const tid of targetIds) {
@@ -125,7 +126,7 @@ class Note {
     note.outgoing_links = targetNotes;
 
     // Incoming backlinks (strictly filtered by access)
-    const incomingLinks = await db.query('SELECT source_note_id FROM note_links WHERE target_note_id = ?', [id]);
+    const incomingLinks = await executor.query('SELECT source_note_id FROM note_links WHERE target_note_id = ?', [id]);
     const sourceIds = incomingLinks.map(l => l.source_note_id);
     const backlinks = [];
     for (const sid of sourceIds) {
@@ -135,7 +136,7 @@ class Note {
     note.backlinks = backlinks;
 
     // Unlinked mentions (scoped strictly to user's own non-deleted notes)
-    const userNotes = await db.query('SELECT id, title, content FROM notes WHERE user_id = ? AND deleted_at IS NULL AND id != ?', [userId, id]);
+    const userNotes = await executor.query('SELECT id, title, content FROM notes WHERE user_id = ? AND deleted_at IS NULL AND id != ?', [userId, id]);
     const titleRegex = new RegExp(`\\b${escapeRegExp(note.title)}\\b`, 'i');
     const explicitLinkRegex = new RegExp(`\\[\\[(?:note:${id}(?:\\|.*)?|${escapeRegExp(note.title)})\\]\\]`, 'i');
 
@@ -189,6 +190,11 @@ class Note {
         err.status = 400;
         throw err;
       }
+      if (resolvedProjectId === null && Number(folder.user_id) !== Number(userId)) {
+        const err = new Error('Forbidden: You do not own this personal folder');
+        err.status = 403;
+        throw err;
+      }
       resolvedFolderId = folder.id;
     }
 
@@ -224,7 +230,7 @@ class Note {
       await EntitySyncService.syncNoteEntity(conn, noteId, userId);
 
       if (ownsTx) await conn.commit();
-      return this.findById(noteId, userId);
+      return this.findById(noteId, userId, ownsTx ? null : conn);
     } catch (err) {
       if (ownsTx) {
         try { await conn.rollback(); } catch (_) {}
@@ -237,15 +243,40 @@ class Note {
 
   static async update(id, userId, data, dbOrConn = null) {
     const { title, content, content_markdown, project_id, folder_id, is_pinned, tags, attachments_json } = data || {};
-    const existing = await (dbOrConn || db).query('SELECT * FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL LIMIT 1', [id, userId]);
-    if (!existing || existing.length === 0) return null;
-    const currentNote = existing[0];
+    const executor = dbOrConn || db;
+
+    const existingRows = await executor.query(
+      `SELECT DISTINCT n.*
+       FROM notes n
+       LEFT JOIN project_entities pe ON pe.entity_type = 'note' AND pe.entity_id = n.id
+       LEFT JOIN project_members pm ON (pm.project_id = n.project_id OR pm.project_id = pe.project_id)
+         AND pm.user_id = ? AND pm.revoked_at IS NULL
+       WHERE n.id = ? AND n.deleted_at IS NULL
+         AND ((n.project_id IS NULL AND n.user_id = ?) OR pm.id IS NOT NULL)
+       LIMIT 1`,
+      [userId, id, userId]
+    );
+    if (!existingRows || existingRows.length === 0) return null;
+    const currentNote = existingRows[0];
+
+    if (currentNote.project_id) {
+      const canMutate = await Project.hasWriteAccess(currentNote.project_id, userId, executor);
+      if (!canMutate) {
+        const err = new Error('Forbidden: Viewers cannot modify project notes');
+        err.status = 403;
+        throw err;
+      }
+    } else if (Number(currentNote.user_id) !== Number(userId)) {
+      const err = new Error('Forbidden: You do not own this note');
+      err.status = 403;
+      throw err;
+    }
     const effectiveContent = content !== undefined ? content : content_markdown;
 
     let resolvedProjectId = currentNote.project_id ? Number(currentNote.project_id) : null;
     if (project_id !== undefined) {
       if (project_id !== null && project_id !== '') {
-        const projAuth = await Project.validateWriteAccess(project_id, userId, dbOrConn || db);
+        const projAuth = await Project.validateWriteAccess(project_id, userId, executor);
         if (!projAuth.valid) {
           const err = new Error(projAuth.error);
           err.status = projAuth.status;
@@ -260,7 +291,7 @@ class Note {
     let resolvedFolderId = currentNote.folder_id ? Number(currentNote.folder_id) : null;
     if (folder_id !== undefined) {
       if (folder_id !== null && folder_id !== '' && folder_id !== 'root') {
-        const folderRows = await (dbOrConn || db).query('SELECT id, project_id, user_id FROM note_folders WHERE id = ? LIMIT 1', [parseInt(folder_id, 10)]);
+        const folderRows = await executor.query('SELECT id, project_id, user_id FROM note_folders WHERE id = ? LIMIT 1', [parseInt(folder_id, 10)]);
         if (!folderRows || folderRows.length === 0) {
           const err = new Error('Folder not found');
           err.status = 404;
@@ -273,12 +304,17 @@ class Note {
           err.status = 400;
           throw err;
         }
+        if (resolvedProjectId === null && Number(folder.user_id) !== Number(userId)) {
+          const err = new Error('Forbidden: You do not own this personal folder');
+          err.status = 403;
+          throw err;
+        }
         resolvedFolderId = folder.id;
       } else {
         resolvedFolderId = null;
       }
     } else if (project_id !== undefined && currentNote.folder_id) {
-      const folderRows = await (dbOrConn || db).query('SELECT id, project_id FROM note_folders WHERE id = ? LIMIT 1', [currentNote.folder_id]);
+      const folderRows = await executor.query('SELECT id, project_id FROM note_folders WHERE id = ? LIMIT 1', [currentNote.folder_id]);
       if (folderRows && folderRows[0]) {
         const fProjId = folderRows[0].project_id ? Number(folderRows[0].project_id) : null;
         if (fProjId !== resolvedProjectId) {
@@ -345,9 +381,8 @@ class Note {
       }
 
       if (updates.length > 0) {
-        params.push(userId);
         params.push(id);
-        await conn.query(`UPDATE notes SET ${updates.join(', ')} WHERE user_id = ? AND id = ?`, params);
+        await conn.query(`UPDATE notes SET ${updates.join(', ')} WHERE id = ?`, params);
       }
 
       if (tags !== undefined) {
@@ -361,7 +396,7 @@ class Note {
       await EntitySyncService.syncNoteEntity(conn, id, userId);
 
       if (ownsTx) await conn.commit();
-      return this.findById(id, userId);
+      return this.findById(id, userId, ownsTx ? null : conn);
     } catch (err) {
       if (ownsTx) {
         try { await conn.rollback(); } catch (_) {}
@@ -376,28 +411,77 @@ class Note {
     const permanent = typeof permanentOrOpts === 'object' && permanentOrOpts !== null
       ? Boolean(permanentOrOpts.permanent)
       : Boolean(permanentOrOpts);
-    const existing = await db.query('SELECT id FROM notes WHERE id = ? AND user_id = ? LIMIT 1', [id, userId]);
-    if (!existing || existing.length === 0) return false;
+    const existingRows = await db.query(
+      `SELECT DISTINCT n.*
+       FROM notes n
+       LEFT JOIN project_entities pe ON pe.entity_type = 'note' AND pe.entity_id = n.id
+       LEFT JOIN project_members pm ON (pm.project_id = n.project_id OR pm.project_id = pe.project_id)
+         AND pm.user_id = ? AND pm.revoked_at IS NULL
+       WHERE n.id = ? AND n.deleted_at IS NULL
+         AND ((n.project_id IS NULL AND n.user_id = ?) OR pm.id IS NOT NULL)
+       LIMIT 1`,
+      [userId, id, userId]
+    );
+    if (!existingRows || existingRows.length === 0) return false;
+    const existingNote = existingRows[0];
+
+    if (existingNote.project_id) {
+      const canMutate = await Project.hasWriteAccess(existingNote.project_id, userId);
+      if (!canMutate) {
+        const err = new Error('Forbidden: Viewers cannot delete project notes');
+        err.status = 403;
+        throw err;
+      }
+    } else if (Number(existingNote.user_id) !== Number(userId)) {
+      const err = new Error('Forbidden: You do not own this note');
+      err.status = 403;
+      throw err;
+    }
 
     if (!permanent) {
-      await db.query('UPDATE notes SET deleted_at = NOW() WHERE id = ? AND user_id = ?', [id, userId]);
+      await db.query('UPDATE notes SET deleted_at = NOW() WHERE id = ?', [id]);
       await EntitySyncService.deleteNoteEntity(db, id);
       return true;
     }
 
-    await db.query('DELETE FROM note_links WHERE source_note_id = ? OR target_note_id = ?', [id, id]);
-    await db.query('DELETE FROM note_tag_map WHERE note_id = ?', [id]);
-    await db.query('DELETE FROM notes WHERE id = ? AND user_id = ?', [id, userId]);
-    // Also remove file_uploads entry for this note if permanently deleted
+    const conn = await db.getConnection();
     try {
-      await db.query("DELETE FROM file_uploads WHERE entity_type = 'note' AND entity_id = ? AND user_id = ?", [id, userId]);
-    } catch (_) {}
-    await EntitySyncService.deleteNoteEntity(db, id);
-    return true;
+      await conn.beginTransaction();
+      await conn.query('DELETE FROM note_links WHERE source_note_id = ? OR target_note_id = ?', [id, id]);
+      await conn.query('DELETE FROM note_tag_map WHERE note_id = ?', [id]);
+      await conn.query('DELETE FROM notes WHERE id = ?', [id]);
+      try {
+        await conn.query("DELETE FROM file_uploads WHERE entity_type = 'note' AND entity_id = ?", [id]);
+      } catch (_) {}
+      await EntitySyncService.deleteNoteEntity(conn, id);
+      await conn.commit();
+      return true;
+    } catch (err) {
+      try { await conn.rollback(); } catch (_) {}
+      throw err;
+    } finally {
+      conn.release();
+    }
   }
 
   static async findTrash(userId) {
-    return db.query('SELECT * FROM notes WHERE user_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC', [userId]);
+    return db.query(
+      `SELECT DISTINCT n.*
+       FROM notes n
+       WHERE n.deleted_at IS NOT NULL
+         AND (
+           (n.project_id IS NULL AND n.user_id = ?)
+           OR (n.project_id IS NOT NULL AND EXISTS (
+             SELECT 1 FROM project_members pm
+             WHERE pm.project_id = n.project_id
+               AND pm.user_id = ?
+               AND pm.role IN ('owner', 'editor')
+               AND pm.revoked_at IS NULL
+           ))
+         )
+       ORDER BY n.deleted_at DESC`,
+      [userId, userId]
+    );
   }
 
   static async findTrashed(userId) {
@@ -405,9 +489,25 @@ class Note {
   }
 
   static async restoreFromTrash(id, userId) {
-    const existing = await db.query('SELECT id FROM notes WHERE id = ? AND user_id = ? LIMIT 1', [id, userId]);
+    const existing = await db.query(
+      `SELECT DISTINCT n.*
+       FROM notes n
+       WHERE n.id = ? AND n.deleted_at IS NOT NULL
+         AND (
+           (n.project_id IS NULL AND n.user_id = ?)
+           OR (n.project_id IS NOT NULL AND EXISTS (
+             SELECT 1 FROM project_members pm
+             WHERE pm.project_id = n.project_id
+               AND pm.user_id = ?
+               AND pm.role IN ('owner', 'editor')
+               AND pm.revoked_at IS NULL
+           ))
+         )
+       LIMIT 1`,
+      [id, userId, userId]
+    );
     if (!existing || existing.length === 0) return null;
-    await db.query('UPDATE notes SET deleted_at = NULL WHERE id = ? AND user_id = ?', [id, userId]);
+    await db.query('UPDATE notes SET deleted_at = NULL WHERE id = ?', [id]);
     await EntitySyncService.syncNoteEntity(db, id, userId);
     return this.findById(id, userId);
   }
@@ -558,6 +658,11 @@ class Note {
         err.status = 400;
         throw err;
       }
+      if (resolvedProjectId === null && Number(parent.user_id) !== numericUserId) {
+        const err = new Error('Forbidden: You do not own this personal folder');
+        err.status = 403;
+        throw err;
+      }
       resolvedParentId = parent.id;
     }
 
@@ -612,7 +717,7 @@ class Note {
           err.status = 400;
           throw err;
         }
-        const pRows = await db.query('SELECT id, project_id FROM note_folders WHERE id = ? LIMIT 1', [pId]);
+        const pRows = await db.query('SELECT id, project_id, user_id FROM note_folders WHERE id = ? LIMIT 1', [pId]);
         if (!pRows || pRows.length === 0) {
           const err = new Error('Parent folder not found');
           err.status = 404;
@@ -623,6 +728,11 @@ class Note {
         if (parentProj !== folderProj) {
           const err = new Error('Parent folder project scope does not match folder project scope');
           err.status = 400;
+          throw err;
+        }
+        if (folderProj === null && Number(pRows[0].user_id) !== numericUserId) {
+          const err = new Error('Forbidden: You do not own this personal folder');
+          err.status = 403;
           throw err;
         }
         updates.push('parent_folder_id = ?');

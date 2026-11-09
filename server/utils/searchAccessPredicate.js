@@ -161,7 +161,7 @@ function accessPredicate(userId, options = {}) {
     ${alias}.deleted_at IS NULL
     AND (${alias}.entity_type <> 'capture' OR ${alias}.owner_user_id = ?)
     AND (
-      ${alias}.owner_user_id = ?
+      (${alias}.entity_type <> 'project' AND ${alias}.owner_user_id = ? AND ${alias}.primary_project_id IS NULL)
       OR EXISTS (
         SELECT 1 FROM project_entities pe
         JOIN project_members pm ON pm.project_id = pe.project_id

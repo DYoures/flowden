@@ -103,15 +103,17 @@ router.get('/', async (req, res, next) => {
     let sql = `
       SELECT DISTINCT r.*
       FROM research_documents r
-      LEFT JOIN project_members pm ON pm.project_id = r.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
-      WHERE (r.user_id = ? OR pm.id IS NOT NULL)
-        AND r.deleted_at IS NULL
+      LEFT JOIN project_entities pe ON pe.entity_type = 'research' AND pe.entity_id = r.id
+      LEFT JOIN project_members pm ON (pm.project_id = r.project_id OR pm.project_id = pe.project_id)
+        AND pm.user_id = ? AND pm.revoked_at IS NULL
+      WHERE r.deleted_at IS NULL
+        AND ((r.project_id IS NULL AND r.user_id = ?) OR pm.id IS NOT NULL)
     `;
     const params = [req.user.id, req.user.id];
 
     if (project_id) {
-      sql += ' AND r.project_id = ?';
-      params.push(parseInt(project_id, 10));
+      sql += ' AND (r.project_id = ? OR pe.project_id = ?)';
+      params.push(parseInt(project_id, 10), parseInt(project_id, 10));
     }
     if (file_type) {
       sql += ' AND r.file_type = ?';
@@ -136,14 +138,24 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /api/v1/research/trash - List soft-deleted research documents owned by user
+// GET /api/v1/research/trash - List soft-deleted research documents accessible to user
 router.get('/trash', async (req, res, next) => {
   try {
     const rows = await db.query(
-      `SELECT r.* FROM research_documents r
-       WHERE r.user_id = ? AND r.deleted_at IS NOT NULL
+      `SELECT DISTINCT r.* FROM research_documents r
+       WHERE r.deleted_at IS NOT NULL
+         AND (
+           (r.project_id IS NULL AND r.user_id = ?)
+           OR (r.project_id IS NOT NULL AND EXISTS (
+             SELECT 1 FROM project_members pm
+             WHERE pm.project_id = r.project_id
+               AND pm.user_id = ?
+               AND pm.role IN ('owner', 'editor')
+               AND pm.revoked_at IS NULL
+           ))
+         )
        ORDER BY r.deleted_at DESC`,
-      [req.user.id]
+      [req.user.id, req.user.id]
     );
     res.json({ documents: rows || [] });
   } catch (err) {
@@ -155,10 +167,13 @@ router.get('/trash', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const rows = await db.query(
-      `SELECT r.*
+      `SELECT DISTINCT r.*
        FROM research_documents r
-       LEFT JOIN project_members pm ON pm.project_id = r.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
-       WHERE r.id = ? AND (r.user_id = ? OR pm.id IS NOT NULL) AND r.deleted_at IS NULL
+       LEFT JOIN project_entities pe ON pe.entity_type = 'research' AND pe.entity_id = r.id
+       LEFT JOIN project_members pm ON (pm.project_id = r.project_id OR pm.project_id = pe.project_id)
+         AND pm.user_id = ? AND pm.revoked_at IS NULL
+       WHERE r.id = ? AND r.deleted_at IS NULL
+         AND ((r.project_id IS NULL AND r.user_id = ?) OR pm.id IS NOT NULL)
        LIMIT 1`,
       [req.user.id, req.params.id, req.user.id]
     );
@@ -312,9 +327,26 @@ router.post('/upload', ...handleResearchUpload);
 // PUT /api/v1/research/:id - Update metadata
 router.put('/:id', async (req, res, next) => {
   try {
-    const existing = await db.query('SELECT id, project_id FROM research_documents WHERE id = ? AND user_id = ? AND deleted_at IS NULL LIMIT 1', [req.params.id, req.user.id]);
+    const existing = await db.query(
+      `SELECT r.id, r.user_id, r.project_id
+       FROM research_documents r
+       LEFT JOIN project_members pm ON pm.project_id = r.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
+       WHERE r.id = ? AND r.deleted_at IS NULL
+         AND ((r.project_id IS NULL AND r.user_id = ?) OR pm.id IS NOT NULL)
+       LIMIT 1`,
+      [req.user.id, req.params.id, req.user.id]
+    );
     if (!existing || existing.length === 0) {
       return res.status(404).json({ error: 'Research document not found' });
+    }
+    const currentDoc = existing[0];
+    if (currentDoc.project_id) {
+      const canMutate = await Project.hasWriteAccess(currentDoc.project_id, req.user.id);
+      if (!canMutate) {
+        return res.status(403).json({ error: 'Forbidden: Viewers cannot modify research documents' });
+      }
+    } else if (Number(currentDoc.user_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: 'Forbidden: You do not own this research document' });
     }
 
     const { title, summary, source_url, project_id, tags_json } = req.body;
@@ -339,13 +371,12 @@ router.put('/:id', async (req, res, next) => {
     if (tags_json !== undefined) { updates.push('tags_json = ?'); params.push(typeof tags_json === 'string' ? tags_json : JSON.stringify(tags_json)); }
 
     if (updates.length > 0) {
-      params.push(req.user.id);
       params.push(req.params.id);
 
       const conn = await db.getConnection();
       try {
         await conn.beginTransaction();
-        await conn.query(`UPDATE research_documents SET ${updates.join(', ')} WHERE user_id = ? AND id = ?`, params);
+        await conn.query(`UPDATE research_documents SET ${updates.join(', ')} WHERE id = ?`, params);
         await EntitySyncService.syncResearchEntity(conn, req.params.id, req.user.id);
         await conn.commit();
       } catch (err) {
@@ -368,16 +399,63 @@ router.delete('/:id', async (req, res, next) => {
   try {
     const isPermanent = req.query.permanent === 'true';
 
+    // Verify existing document and authorization
+    const existing = await db.query(
+      `SELECT r.id, r.user_id, r.project_id, r.file_path
+       FROM research_documents r
+       LEFT JOIN project_members pm ON pm.project_id = r.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
+       WHERE r.id = ?
+         AND ((r.project_id IS NULL AND r.user_id = ?) OR pm.id IS NOT NULL)
+       LIMIT 1`,
+      [req.user.id, req.params.id, req.user.id]
+    );
+    if (!existing || existing.length === 0) {
+      return res.status(404).json({ error: 'Research document not found or unauthorized' });
+    }
+    const currentDoc = existing[0];
+    if (currentDoc.project_id) {
+      const canMutate = await Project.hasWriteAccess(currentDoc.project_id, req.user.id);
+      if (!canMutate) {
+        return res.status(403).json({ error: 'Forbidden: Viewers cannot delete research documents' });
+      }
+    } else if (Number(currentDoc.user_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: 'Forbidden: You do not own this research document' });
+    }
+
     if (isPermanent) {
-      const rows = await db.query(
-        'SELECT file_path FROM research_documents WHERE id = ? AND user_id = ? LIMIT 1',
-        [req.params.id, req.user.id]
-      );
-      if (!rows || rows.length === 0) {
-        return res.status(404).json({ error: 'Research document not found or unauthorized' });
+      const filePath = currentDoc.file_path;
+      const conn = await db.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        // 1. Delete associated file_uploads
+        await conn.query("DELETE FROM file_uploads WHERE entity_type = 'research' AND entity_id = ?", [req.params.id]);
+
+        // 2. Delete semantic entity_links
+        await conn.query(
+          "DELETE FROM entity_links WHERE (source_type = 'research' AND source_id = ?) OR (target_type = 'research' AND target_id = ?)",
+          [req.params.id, req.params.id]
+        );
+
+        // 3. Delete excerpts
+        await conn.query('DELETE FROM research_excerpts WHERE research_id = ?', [req.params.id]);
+
+        // 4. Delete canonical entities and project_entities
+        await conn.query("DELETE FROM project_entities WHERE entity_type = 'research' AND entity_id = ?", [req.params.id]);
+        await conn.query("DELETE FROM entities WHERE entity_type = 'research' AND entity_id = ?", [req.params.id]);
+
+        // 5. Delete research document
+        await conn.query('DELETE FROM research_documents WHERE id = ?', [req.params.id]);
+
+        await conn.commit();
+      } catch (txErr) {
+        try { await conn.rollback(); } catch (_) {}
+        throw txErr;
+      } finally {
+        conn.release();
       }
 
-      const filePath = rows[0].file_path;
+      // ONLY unlink physical file from disk AFTER database transaction successfully commits
       if (filePath && fs.existsSync(filePath)) {
         try {
           fs.unlinkSync(filePath);
@@ -386,9 +464,6 @@ router.delete('/:id', async (req, res, next) => {
         }
       }
 
-      await db.query('DELETE FROM research_documents WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
-      await db.query('DELETE FROM entities WHERE entity_type = "research" AND entity_id = ?', [req.params.id]);
-      await db.query('DELETE FROM project_entities WHERE entity_type = "research" AND entity_id = ?', [req.params.id]);
       return res.json({ success: true, message: 'Document permanently deleted.' });
     }
 
@@ -406,6 +481,18 @@ router.delete('/:id', async (req, res, next) => {
 // POST /api/v1/research/:id/restore - Restore soft-deleted research document
 router.post('/:id/restore', async (req, res, next) => {
   try {
+    const existing = await db.query(
+      `SELECT r.id, r.user_id, r.project_id
+       FROM research_documents r
+       LEFT JOIN project_members pm ON pm.project_id = r.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
+       WHERE r.id = ? AND r.deleted_at IS NOT NULL
+         AND ((r.project_id IS NULL AND r.user_id = ?) OR (pm.id IS NOT NULL AND pm.role IN ('owner', 'editor')))
+       LIMIT 1`,
+      [req.user.id, req.params.id, req.user.id]
+    );
+    if (!existing || existing.length === 0) {
+      return res.status(404).json({ error: 'Research document not found or unauthorized' });
+    }
     await researchService.restoreResearchDoc(db, req.user.id, req.params.id);
     res.json({ success: true, message: 'Document restored successfully.' });
   } catch (err) {
@@ -431,27 +518,72 @@ router.post('/:id/bridge', async (req, res, next) => {
     }
     const doc = rows[0];
 
+    // Check if an active bridged note already exists in entity_links
+    const existingLinks = await db.query(
+      `SELECT el.source_id as note_id
+       FROM entity_links el
+       JOIN notes n ON n.id = el.source_id AND n.deleted_at IS NULL
+       WHERE el.source_type = 'note'
+         AND el.target_type = 'research'
+         AND el.target_id = ?
+         AND el.deleted_at IS NULL
+       ORDER BY el.id ASC LIMIT 1`,
+      [doc.id]
+    );
+
+    if (existingLinks && existingLinks.length > 0) {
+      const existingNote = await Note.findById(existingLinks[0].note_id, req.user.id);
+      if (existingNote) {
+        return res.status(200).json({
+          success: true,
+          message: 'Research already bridged to Vault Note.',
+          note: existingNote,
+          link: {
+            source_type: 'note',
+            source_id: existingNote.id,
+            target_type: 'research',
+            target_id: doc.id,
+            link_type: 'references'
+          }
+        });
+      }
+    }
+
     // Build seeded note content
     const noteTitle = doc.title ? `Research: ${doc.title}` : 'Research Note';
     const sourceRef = doc.original_filename || doc.file_name || doc.source_url || 'Internal Research Library';
     const noteContent = `# ${doc.title}\n\n> Source Document: ${sourceRef}\n\n## Abstract\n${doc.summary || 'No summary available.'}\n\n## Notes & Synthesis\n\n- Key finding:\n- Reference citation: ${doc.source_url || sourceRef}\n`;
 
-    // Note.create runs inside an atomic transaction and auto-syncs note entities
-    const createdNote = await Note.create({
-      user_id: req.user.id,
-      project_id: doc.project_id || null,
-      title: noteTitle,
-      content: noteContent,
-      tags: ['research', 'literature']
-    });
+    // Perform bridging atomically in a transaction
+    const conn = await db.getConnection();
+    let createdNote = null;
+    try {
+      await conn.beginTransaction();
 
-    // Create confirmed semantic relationship link in entity_links
-    await db.query(
-      `INSERT INTO entity_links (user_id, source_type, source_id, target_type, target_id, link_type, origin, is_confirmed, created_at, updated_at)
-       VALUES (?, 'note', ?, 'research', ?, 'references', 'manual', 1, NOW(), NOW())
-       ON DUPLICATE KEY UPDATE is_confirmed = 1, deleted_at = NULL, updated_at = NOW()`,
-      [req.user.id, createdNote.id, doc.id]
-    );
+      // Note.create within transaction
+      createdNote = await Note.create({
+        user_id: req.user.id,
+        project_id: doc.project_id || null,
+        title: noteTitle,
+        content: noteContent,
+        tags: ['research', 'literature']
+      }, {}, conn);
+
+      // Create confirmed semantic relationship link in entity_links
+      await conn.query(
+        `INSERT INTO entity_links (user_id, source_type, source_id, target_type, target_id, link_type, origin, is_confirmed, created_at, updated_at)
+         VALUES (?, 'note', ?, 'research', ?, 'references', 'manual', 1, NOW(), NOW())
+         ON DUPLICATE KEY UPDATE is_confirmed = 1, deleted_at = NULL, updated_at = NOW()`,
+        [req.user.id, createdNote.id, doc.id]
+      );
+
+      await conn.commit();
+    } catch (bridgeErr) {
+      try { await conn.rollback(); } catch (_) {}
+      throw bridgeErr;
+    } finally {
+      conn.release();
+    }
 
     res.status(201).json({
       success: true,

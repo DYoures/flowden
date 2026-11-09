@@ -17,7 +17,7 @@ router.get('/', async (req, res, next) => {
       LEFT JOIN project_entities pe ON pe.entity_type = 'task' AND pe.entity_id = t.id
       LEFT JOIN project_members pm ON (pm.project_id = t.project_id OR pm.project_id = pe.project_id)
         AND pm.user_id = ? AND pm.revoked_at IS NULL
-      WHERE (t.user_id = ? OR pm.id IS NOT NULL)
+      WHERE ((t.project_id IS NULL AND t.user_id = ?) OR pm.id IS NOT NULL)
     `;
     const params = [req.user.id, req.user.id];
 
@@ -109,7 +109,7 @@ router.put('/:id', async (req, res, next) => {
        LEFT JOIN project_entities pe ON pe.entity_type = 'task' AND pe.entity_id = t.id
        LEFT JOIN project_members pm ON (pm.project_id = t.project_id OR pm.project_id = pe.project_id)
          AND pm.user_id = ? AND pm.revoked_at IS NULL
-       WHERE t.id = ? AND (t.user_id = ? OR pm.id IS NOT NULL)
+       WHERE t.id = ? AND ((t.project_id IS NULL AND t.user_id = ?) OR pm.id IS NOT NULL)
        LIMIT 1`,
       [req.user.id, req.params.id, req.user.id]
     );
@@ -118,7 +118,7 @@ router.put('/:id', async (req, res, next) => {
 
     if (existingTask.project_id) {
       const canMutate = await Project.hasWriteAccess(existingTask.project_id, req.user.id);
-      if (!canMutate && Number(existingTask.user_id) !== Number(req.user.id)) {
+      if (!canMutate) {
         return res.status(403).json({ error: 'Forbidden: Viewers cannot mutate tasks' });
       }
     } else if (Number(existingTask.user_id) !== Number(req.user.id)) {
@@ -186,7 +186,7 @@ router.delete('/:id', async (req, res, next) => {
        LEFT JOIN project_entities pe ON pe.entity_type = 'task' AND pe.entity_id = t.id
        LEFT JOIN project_members pm ON (pm.project_id = t.project_id OR pm.project_id = pe.project_id)
          AND pm.user_id = ? AND pm.revoked_at IS NULL
-       WHERE t.id = ? AND (t.user_id = ? OR pm.id IS NOT NULL)
+       WHERE t.id = ? AND ((t.project_id IS NULL AND t.user_id = ?) OR pm.id IS NOT NULL)
        LIMIT 1`,
       [req.user.id, req.params.id, req.user.id]
     );
@@ -195,7 +195,7 @@ router.delete('/:id', async (req, res, next) => {
 
     if (existingTask.project_id) {
       const canMutate = await Project.hasWriteAccess(existingTask.project_id, req.user.id);
-      if (!canMutate && Number(existingTask.user_id) !== Number(req.user.id)) {
+      if (!canMutate) {
         return res.status(403).json({ error: 'Forbidden: Viewers cannot delete tasks' });
       }
     } else if (Number(existingTask.user_id) !== Number(req.user.id)) {

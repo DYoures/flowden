@@ -219,7 +219,7 @@ class SearchService {
 
     // 2. Accessible Edges
     const resEdges = await dbOrConn.query(`
-      SELECT el.id, el.source_type, el.source_id, el.target_type, el.target_id, el.link_type, el.origin
+      SELECT el.id, el.source_type, el.source_id, el.target_type, el.target_id, el.link_type, el.origin, el.is_confirmed
       FROM entity_links el
       JOIN entities e_src ON e_src.entity_type = el.source_type AND e_src.entity_id = el.source_id
       JOIN entities e_tgt ON e_tgt.entity_type = el.target_type AND e_tgt.entity_id = el.target_id

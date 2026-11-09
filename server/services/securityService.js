@@ -806,7 +806,9 @@ async function canUserAccessUploadedFile(userId, relativeUrlPath) {
     );
     if (uploadRows && uploadRows.length > 0) {
       const rec = uploadRows[0];
-      if (Number(rec.user_id) === uid) return true;
+      if (!rec.project_id && Number(rec.user_id) === uid) {
+        return true;
+      }
 
       if (rec.entity_type === 'note' && rec.entity_id) {
         const noteAccess = await db.query(
@@ -814,7 +816,8 @@ async function canUserAccessUploadedFile(userId, relativeUrlPath) {
            LEFT JOIN project_entities pe ON pe.entity_type = 'note' AND pe.entity_id = n.id
            LEFT JOIN project_members pm ON (pm.project_id = n.project_id OR pm.project_id = pe.project_id)
              AND pm.user_id = ? AND pm.revoked_at IS NULL
-           WHERE n.id = ? AND n.deleted_at IS NULL AND (n.user_id = ? OR pm.id IS NOT NULL)
+           WHERE n.id = ? AND n.deleted_at IS NULL
+             AND ((n.project_id IS NULL AND n.user_id = ?) OR pm.id IS NOT NULL)
            LIMIT 1`,
           [uid, rec.entity_id, uid]
         );
@@ -824,23 +827,33 @@ async function canUserAccessUploadedFile(userId, relativeUrlPath) {
 
       if (rec.entity_type === 'research' && rec.entity_id) {
         const resAccess = await db.query(
-          `SELECT 1 FROM research_documents r
+          `SELECT r.id, r.user_id, r.project_id, r.deleted_at, pm.role
+           FROM research_documents r
            LEFT JOIN project_members pm ON pm.project_id = r.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
-           WHERE r.id = ? AND (r.user_id = ? OR (pm.id IS NOT NULL AND r.deleted_at IS NULL))
+           WHERE r.id = ?
            LIMIT 1`,
-          [uid, rec.entity_id, uid]
+          [uid, rec.entity_id]
         );
-        if (resAccess && resAccess.length > 0) return true;
+        if (resAccess && resAccess.length > 0) {
+          const rDoc = resAccess[0];
+          if (rDoc.deleted_at !== null) {
+            if (!rDoc.project_id && Number(rDoc.user_id) === uid) return true;
+            if (rDoc.project_id && (rDoc.role === 'owner' || rDoc.role === 'editor')) return true;
+            return false;
+          }
+          if (!rDoc.project_id && Number(rDoc.user_id) === uid) return true;
+          if (rDoc.project_id && rDoc.role !== null) return true;
+          return false;
+        }
         return false;
       }
 
       if (rec.project_id) {
         const projAccess = await db.query(
-          `SELECT 1 FROM projects p
-           LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ? AND pm.revoked_at IS NULL
-           WHERE p.id = ? AND (p.user_id = ? OR pm.id IS NOT NULL)
+          `SELECT 1 FROM project_members pm
+           WHERE pm.project_id = ? AND pm.user_id = ? AND pm.revoked_at IS NULL
            LIMIT 1`,
-          [uid, rec.project_id, uid]
+          [rec.project_id, uid]
         );
         if (projAccess && projAccess.length > 0) return true;
       }
@@ -851,15 +864,24 @@ async function canUserAccessUploadedFile(userId, relativeUrlPath) {
     if (cleanUrlPath.startsWith('/uploads/research/')) {
       const fname = path.basename(cleanUrlPath);
       const resRows = await db.query(
-        `SELECT r.user_id, r.project_id
+        `SELECT r.user_id, r.project_id, r.deleted_at, pm.role
          FROM research_documents r
          LEFT JOIN project_members pm ON pm.project_id = r.project_id AND pm.user_id = ? AND pm.revoked_at IS NULL
          WHERE (r.file_name = ? OR r.file_path = ? OR r.file_path LIKE ?)
-           AND (r.user_id = ? OR (pm.id IS NOT NULL AND r.deleted_at IS NULL))
          LIMIT 1`,
-        [uid, fname, cleanUrlPath, `%${fname}`, uid]
+        [uid, fname, cleanUrlPath, `%${fname}`]
       );
-      if (resRows && resRows.length > 0) return true;
+      if (resRows && resRows.length > 0) {
+        const rDoc = resRows[0];
+        if (rDoc.deleted_at !== null) {
+          if (!rDoc.project_id && Number(rDoc.user_id) === uid) return true;
+          if (rDoc.project_id && (rDoc.role === 'owner' || rDoc.role === 'editor')) return true;
+          return false;
+        }
+        if (!rDoc.project_id && Number(rDoc.user_id) === uid) return true;
+        if (rDoc.project_id && rDoc.role !== null) return true;
+        return false;
+      }
       return false;
     }
 
@@ -873,7 +895,7 @@ async function canUserAccessUploadedFile(userId, relativeUrlPath) {
          AND pm.user_id = ? AND pm.revoked_at IS NULL
        WHERE n.deleted_at IS NULL
          AND (n.content LIKE ? OR CAST(n.attachments_json AS CHAR) LIKE ?)
-         AND (n.user_id = ? OR pm.id IS NOT NULL)
+         AND ((n.project_id IS NULL AND n.user_id = ?) OR pm.id IS NOT NULL)
        LIMIT 1`,
       [uid, likePattern, likePattern, uid]
     );
