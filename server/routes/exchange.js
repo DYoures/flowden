@@ -54,6 +54,11 @@ const ALLOWED_RESOURCES = {
     mimeType: 'application/schema+json; charset=utf-8',
     filePath: path.resolve(__dirname, '..', '..', 'docs', 'knowledge-exchange', 'flowden-package.schema.json')
   },
+  'schema-v2': {
+    filename: 'flowden-knowledge-format-v2.schema.json',
+    mimeType: 'application/schema+json; charset=utf-8',
+    filePath: path.resolve(__dirname, '..', '..', 'docs', 'knowledge-exchange', 'flowden-knowledge-format-v2.schema.json')
+  },
   'reference-package': {
     filename: 'flowden-reference-package.flowden.zip',
     mimeType: 'application/zip',
@@ -64,7 +69,7 @@ const ALLOWED_RESOURCES = {
 /**
  * GET /api/v1/exchange/resources/:resourceKey
  * Serves fixed, allowlisted specification artifacts and reference archives.
- * Valid keys: 'research-spec', 'package-schema', 'reference-package'.
+ * Valid keys: 'research-spec', 'package-schema', 'schema-v2', 'reference-package'.
  */
 router.get('/resources/:resourceKey', (req, res) => {
   const resource = ALLOWED_RESOURCES[req.params.resourceKey];

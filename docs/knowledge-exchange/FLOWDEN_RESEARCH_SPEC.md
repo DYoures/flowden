@@ -1,416 +1,308 @@
-# Flowden Research Specification & Knowledge Exchange Standard (FKF v1.0.0)
+# Flowden Research Specification & Knowledge Exchange Guide (FKF 2.0)
 
-- **Format Identifier:** `flowden-knowledge-package`
-- **Specification Version:** `1.0.0`
-- **Target Schema:** [flowden-package.schema.json](file:///C:/Users/Sod/.gemini/antigravity/scratch/flowden/docs/knowledge-exchange/flowden-package.schema.json)
-- **Architectural Decisions:** [PHASE-1-ARCHITECTURAL-DECISIONS.md](file:///C:/Users/Sod/.gemini/antigravity/scratch/flowden/docs/knowledge-exchange/PHASE-1-ARCHITECTURAL-DECISIONS.md)
-- **Reference Package:** [flowden-reference-package.flowden.zip](file:///C:/Users/Sod/.gemini/antigravity/scratch/flowden/docs/knowledge-exchange/examples/flowden-reference-package.flowden.zip)
+- **Format Identifier:** `flowden-knowledge-format`
+- **Specification Version:** `2.0.0`
+- **File Format:** Single Standalone `.fkf` (UTF-8 JSON) or Legacy Archive `.flowden.zip`
+- **Target Schema:** [flowden-knowledge-format-v2.schema.json](file:///C:/Users/Sod/.gemini/antigravity/scratch/flowden/docs/knowledge-exchange/flowden-knowledge-format-v2.schema.json)
+- **Legacy Schema:** [flowden-package.schema.json](file:///C:/Users/Sod/.gemini/antigravity/scratch/flowden/docs/knowledge-exchange/flowden-package.schema.json)
 
 ---
 
-## 1. Introduction (Section 7.1)
+## 1. Executive Overview
 
 ### 1.1 What Is Flowden Knowledge Exchange?
-**Flowden Knowledge Exchange** is an open, portable, machine-readable standard that allows external AI research assistants—such as **Claude**, **ChatGPT**, **NotebookLM**, and **Gemini**—to package deep research into a structured, interconnected **Flowden Knowledge Package (`.flowden.zip`)** conforming to the **Flowden Knowledge Format (`FKF v1.0.0`)**.
+**Flowden Knowledge Exchange (FKF 2.0)** is an open, portable, machine-readable standard that enables external AI research systems—including **Claude**, **ChatGPT**, **Gemini**, **NotebookLM**, and **DeepSeek**—to transform research results, literature reviews, and domain analyses into a fully interconnected Second Brain knowledge package.
 
-### 1.2 What Is a Flowden Knowledge Package?
-Instead of exporting a flat wall of text, a **Flowden Knowledge Package** is a structured archive containing:
-- **1 Project & Rich Overview** (`manifest.json` + `project/overview.md`)
-- **Hierarchical Note Folders** (`folders.json`)
-- **Modular Markdown Notes** (`notes/*.md`) with stable package-local IDs and inline WikiLinks
-- **Research Sources & Verbatim Excerpts** (`sources/index.json` + `sources/*.md`) with strict citation provenance
-- **Typed Semantic Relationships** (`relationships/links.json`) connecting Notes, Sources, Excerpts, and Tasks
-- **Verified Media Assets** (`assets/*`) such as architecture diagrams or data charts
-- **Optional Workflow Modules** (`optional/tasks.json`, `optional/spatial-board.json`, and `exports/research-report.pdf`)
-
-### 1.3 Why Structured Research Beats a Single PDF or Markdown File
-When an AI assistant dumps a 4,000-word report into a single PDF or monolithic Markdown document:
-- Individual concepts cannot be linked, tagged, or reorganized independently.
-- Source excerpts and bibliographic metadata are flattened into prose rather than tracked as reusable research entities.
-- Knowledge Graph connections (`supports`, `contradicts`, `cites`, `derived_from`) are lost.
-- Visual Spatial Boards and actionable follow-up Tasks must be rebuilt manually by the user.
-
-By producing a `.flowden.zip` package, the external AI delivers an immediately navigable **connected knowledge system**.
-
-### 1.4 What Flowden Will Do with the Package
-> [!IMPORTANT]
-> **Implementation Status Notice:** Phase 1 formalizes the **Flowden Knowledge Format (`FKF v1.0.0`)** specification, JSON Schema, and reference package. The automated backend/frontend `.flowden.zip` importer is a **planned capability scheduled for Phase 2 and subsequent integration phases**—it is not yet active in the live Flowden UI.
-
-Once the Phase 2+ importer is deployed, Flowden will:
-1. Safely inspect and validate the `.flowden.zip` archive against [flowden-package.schema.json](file:///C:/Users/Sod/.gemini/antigravity/scratch/flowden/docs/knowledge-exchange/flowden-package.schema.json) and Flowden's security rules.
-2. Present an interactive **Import Preview & Validation Report** showing the Project, Folders, Notes, Sources, Relationships, Assets, and optional modules.
-3. Let the user choose whether to create a new Project or merge into an existing Project, and choose which optional modules (`tasks`, `spatial_board`) to include.
-4. Resolve package-local IDs into canonical Flowden database records (`projects`, `note_folders`, `notes`, `research_documents`, `research_excerpts`, `entity_links`, `note_links`, `tasks`, `boards`) inside a crash-safe transactional pipeline.
-
----
-
-## 2. How the Workflow Works (Section 7.2)
+Unlike conventional AI outputs that generate a single, monolithic, flat text file or PDF, Flowden Knowledge Format decomposes research into:
+1. **A Cohesive Research Project & Synthesis** (`project`)
+2. **Hierarchical Knowledge Folders** (`folders`)
+3. **Atomic, Focused Markdown Notes** (`notes`) with inline WikiLinks (`[[fkf:note-...|Display Title]]`)
+4. **Structured Bibliographic Sources** (`sources`) with verbatim highlighted **Excerpts** (`excerpts`) and location anchors
+5. **Typed Semantic Relationships** (`relationships`) establishing a navigable Knowledge Graph
+6. **Optional Actionable Modules** (`optional_modules`) including Kanban Tasks and 2D Spatial Board layouts
 
 ```mermaid
-flowchart LR
-  A["1. Download FLOWDEN_RESEARCH_SPEC.md"] --> B["2. Provide Spec + Topic to External AI"]
-  B --> C["3. AI Conducts Research & Verifies Sources"]
-  C --> D["4. AI Organizes Folders, Notes, Sources & Links"]
-  D --> E["5. AI Generates .flowden.zip (or Structured Files)"]
-  E --> F["6. User Uploads .flowden.zip in Flowden (Planned Phase 2+)"]
-  F --> G["7. Flowden Validates Schema, Links & Security"]
-  G --> H["8. User Previews & Approves Transactional Import"]
+flowchart TD
+  subgraph External AI Research
+    A["User Prompt & Topic"] --> B["External AI (Claude / ChatGPT / Gemini / NotebookLM)"]
+    B --> C["Topic-Driven Knowledge Decomposition"]
+  end
+  subgraph Standalone FKF 2.0 Package
+    C --> D["Single .fkf JSON Document"]
+    D --> E["Project & Folders"]
+    D --> F["Atomic Notes with [[fkf:note-...]]"]
+    D --> G["Sources & Verbatim Excerpts"]
+    D --> H["Semantic Relationships (10 Types)"]
+    D --> I["Optional Tasks & Spatial Board"]
+  end
+  subgraph Flowden Workspace
+    D --> J["Flowden Knowledge Importer"]
+    J --> K["Mode A: Create New Project"]
+    J --> L["Mode B: Merge into Existing Project"]
+    J --> M["Interactive Knowledge Graph & Review"]
+  end
 ```
 
-1. **Download the Flowden Research Spec:** The user downloads `FLOWDEN_RESEARCH_SPEC.md` (and optionally `flowden-package.schema.json`).
-2. **Give the Specification to an External AI:** The user attaches `FLOWDEN_RESEARCH_SPEC.md` to their prompt in Claude, ChatGPT, NotebookLM, or another AI tool.
-3. **Provide the Research Topic & Requirements:** The user specifies their research question, scope, provided source documents, and whether optional Tasks or a Spatial Board are desired.
-4. **AI Conducts Research:** The AI gathers evidence, extracts verbatim excerpts, and records exact provenance (authors, dates, URLs, verification status).
-5. **AI Organizes Findings:** The AI decomposes the synthesis into logical Folders, atomic Markdown Notes, structured Sources, and explicit semantic Relationships using stable package-local IDs.
-6. **AI Generates the `.flowden.zip` Package:** The AI builds the archive matching the exact FKF directory layout (or outputs the files for local zipping if the AI client lacks code execution).
-7. **User Imports via Flowden (Planned Phase 2+):** The user selects the `.flowden.zip` file in Flowden's **AI Assistant — Knowledge Exchange** panel or **Research Center**.
-8. **Validation, Preview & User Approval:** Flowden validates the archive, displays a complete preview and conflict resolution summary, and imports the workspace only after explicit user approval.
+---
+
+## 2. Core Directives for External AI Systems
+
+When instructed to research a subject and generate a Flowden Knowledge Package (`.fkf`), you **MUST** adhere to the following principles:
+
+### 2.1 Dynamic, Topic-Appropriate Decomposition (No Monolithic Notes)
+- **Never produce a single giant note or an empty cookie-cutter template.**
+- Tailor the structural decomposition to the actual domain of inquiry:
+  - **Scientific & Academic Research:** Decompose into *Theoretical Foundations*, *Methodological Framework*, *Empirical Findings / Experiments*, *Counter-Evidence & Critiques*, and *Future Directions*.
+  - **Software Architecture & Technical Systems:** Decompose into *High-Level Architecture*, *Component Interfaces*, *Data Flow & Storage*, *Failure Modes & Resilience*, *Security & Threat Modeling*, and *Implementation Runbook*.
+  - **Historical & Policy Analysis:** Decompose into *Historical Trajectory & Timeline*, *Primary Stakeholders & Motivations*, *Policy Interventions & Counter-Measures*, *Empirical Impact*, and *Contemporary Lessons*.
+- Each Note must address a single coherent concept, mechanism, or synthesis point. Typical packages contain between **3 and 15 notes**.
+
+### 2.2 Hierarchical Folder Organization
+- Group related notes into logical folders with a clean sorting hierarchy (e.g. `01-Foundations`, `02-Architecture`, `03-Tradeoffs`).
+- Folder nesting depth must not exceed **8 levels**.
+- Every folder must have a unique identifier prefixed with `fld-`.
+
+### 2.3 Bibliographic Sources & Verbatim Provenance
+- Register every cited paper, document, dataset, article, or documentation source in the `sources` array.
+- For each source:
+  - Specify the precise `source_type` (`journal_article`, `technical_report`, `documentation`, `whitepaper`, etc.).
+  - Set `verification_status` honestly (`verified`, `partially_verified`, `unverified_external`, `synthetic_demonstration`).
+  - Extract **verbatim quoted excerpts** into `excerpts` with an exact `location_anchor` (e.g., `"Section 3.2, p. 14"`, `"Chapter 4, para. 3"`).
+  - **Anti-Hallucination Rule:** NEVER invent authors, dates, DOIs, or URLs. If an author or date is unknown, output `null` or an empty array.
+
+### 2.4 Semantic Relationships & Knowledge Graph
+- Explicitly connect concepts in `relationships` using the 10 canonical Flowden link types:
+  1. `references` — General informational citation or reference.
+  2. `embeds` — Direct structural embedding or inclusion.
+  3. `cites` — Bibliographic academic or legal citation.
+  4. `derived_from` — Conceptual derivation, transformation, or synthesis.
+  5. `supports` — Empirical evidence or theoretical proof supporting a thesis.
+  6. `contradicts` — Disputed findings, counter-arguments, or conflicting evidence.
+  7. `inspired_by` — Conceptual inspiration or historical lineage.
+  8. `depends_on` — Technical or architectural dependency.
+  9. `blocks` — Blocker or prerequisite constraint.
+  10. `relates_to` — General associative link.
+- **Trust Boundary:** External AI systems cannot self-certify relationships. When Flowden imports relationships, they are safely staged as unconfirmed (`origin: "ai_suggested"`, `is_confirmed: 0`) so users can inspect and confirm them in the Knowledge Graph.
+
+### 2.5 WikiLinks Syntax
+- Interlink notes in Markdown bodies using stable package WikiLinks:
+  ```markdown
+  [[fkf:note-system-architecture|System Architecture]]
+  ```
+- The target ID must match an existing `note-...` identifier in the package.
+
+### 2.6 Strict ID Prefix Conventions
+Every entity in the package MUST use lowercase alphanumeric identifiers with strict prefix conventions:
+| Entity Type | Prefix Pattern | Example |
+| :--- | :--- | :--- |
+| **Package** | `pkg-[a-z0-9_-]{2,60}` | `pkg-distributed-consensus-2026` |
+| **Project** | `proj-[a-z0-9_-]{2,60}` | `proj-raft-paxos-analysis` |
+| **Folder** | `fld-[a-z0-9_-]{2,60}` | `fld-consensus-protocols` |
+| **Note** | `note-[a-z0-9_-]{2,60}` | `note-raft-leader-election` |
+| **Source** | `src-[a-z0-9_-]{2,60}` | `src-ongaro-raft-2014` |
+| **Excerpt** | `exc-[a-z0-9_-]{2,60}` | `exc-raft-safety-invariant` |
+| **Relationship** | `rel-[a-z0-9_-]{2,60}` | `rel-raft-to-paxos` |
+| **Task** | `tsk-[a-z0-9_-]{2,60}` | `tsk-benchmark-election-timeout` |
+| **Spatial Board** | `brd-[a-z0-9_-]{2,60}` | `brd-consensus-overview` |
+| **Board Group** | `grp-[a-z0-9_-]{2,60}` | `grp-election-phase` |
+| **Board Item** | `bitm-[a-z0-9_-]{2,60}` | `bitm-note-leader-election` |
+| **Board Connection** | `bcon-[a-z0-9_-]{2,60}` | `bcon-election-to-replication` |
+
+**Package-Wide Uniqueness:** Every ID across all entity types must be globally unique within the package.
+
+### 2.7 Forbidden Database-Owned Properties
+**NEVER output database internal keys or timestamps.** Flowden's persistence engine creates and manages database rows. The following properties are strictly forbidden and will cause the importer to reject the package:
+- ❌ `database_id`
+- ❌ `dbId`
+- ❌ `user_id`
+- ❌ `created_at`
+- ❌ `updated_at`
 
 ---
 
-## 3. Instructions for External AI Systems (Section 7.3)
+## 3. FKF 2.0 Specification & Document Structure
 
-If you are an AI system reading this specification to generate a Flowden Knowledge Package for a user, you **MUST** obey the following operational directives:
+An FKF 2.0 document is a single UTF-8 JSON file containing the following structure:
 
-1. **Understand the Research Objective First:** Identify the core research questions, boundaries, and target audience before creating entities.
-2. **Decompose into Atomic, Well-Scoped Notes:** Do not dump the entire report into one Note. Create separate Notes for distinct concepts, mechanisms, comparisons, case studies, or methodological critiques (typically 3 to 15 Notes per package).
-3. **Create a Logical Folder Hierarchy:** Group Notes into meaningful folders (`folders.json`) such as `01-Foundations`, `02-Empirical-Evidence`, `03-Synthesis-and-Tradeoffs`. Do not exceed a folder nesting depth of 8.
-4. **Identify Reliable Sources & Preserve Provenance:** Record every source in `sources/index.json` with a companion `sources/<slug>.md` document and structured `excerpts[]`.
-5. **Connect Related Notes and Sources Explicitly:** Populate `relationships/links.json` using package-local IDs and use inline package WikiLinks (`[[fkf:<note-id>|Display Title]]`) inside Note Markdown.
-6. **Always Use Stable Package-Local IDs:** Every entity MUST have a unique, lowercase, prefix-typed ID (`proj-*`, `fld-*`, `note-*`, `src-*`, `exc-*`, `ast-*`, `tsk-*`, `brd-*`, `grp-*`, `bitm-*`, `rel-*`, `bcon-*`).
-7. **Eliminate Redundancy:** Each Note must have a distinct purpose. Cross-reference related concepts with `[[fkf:<note-id>|Display Title]]` instead of repeating paragraphs across Notes.
-8. **Separate Verified Facts from Uncertainty:** Mark uncertain claims explicitly in prose and set `"verification_status"` accurately (`"verified"`, `"partially_verified"`, `"unverified_external"`, or `"synthetic_demonstration"`).
-9. **STRICT ANTI-HALLUCINATION RULE:**
-   - **NEVER** invent facts, statistics, quotes, authors, publication dates, DOIs, or URLs.
-   - If a source's publication date, author, or URL is unknown, set `"publication_date": null`, `"authors": []`, or `"source_url": null`.
-   - If generating a synthetic/example package for testing, set `"is_synthetic_example": true` and `"verification_status": "synthetic_demonstration"`.
-10. **Avoid Unnecessary Optional Modules & Never Invent Deadlines:**
-    - Only populate `optional/tasks.json` or `optional/spatial-board.json` when actionable next steps or visual synthesis add genuine value.
-    - **NEVER invent task deadlines:** Always set `"due_date": null` on every task in `optional/tasks.json` unless the user explicitly supplied a calendar date in their prompt.
-
----
-
-## 4. Research Quality and Source Integrity (Section 7.4)
-
-### 4.1 Required Source Metadata (`sources/index.json`)
-Every entry in `sources/index.json` must record:
-- `id`: Stable package-local ID (`^src-[a-z0-9_-]{2,59}$`, e.g., `src-urban-albedo-2025`).
-- `title`: Exact title of the paper, report, dataset, or documentation page.
-- `source_type`: One of:
-  - `"journal_article"`
-  - `"technical_report"`
-  - `"book_or_chapter"`
-  - `"web_documentation"`
-  - `"dataset"`
-  - `"standard_or_specification"`
-  - `"primary_interview_or_field_note"`
-  - `"synthetic_demonstration"`
-- `authors`: Array of author or organization strings (`string[]`). Use `[]` if unknown—never guess names.
-- `publication_date`: `YYYY-MM-DD` string when verified, or `null` when unknown.
-- `accessed_date`: `YYYY-MM-DD` string when accessed online, or `null`.
-- `source_url`: Full `https://` or `http://` URL when verified, or `null`. Never fabricate URLs.
-- `verification_status`:
-  - `"verified"` — Directly verified from user-provided documents or retrieved primary sources.
-  - `"partially_verified"` — Primary claim verified, some secondary metadata unavailable.
-  - `"unverified_external"` — Referenced from secondary literature or model training knowledge without live primary document verification; must be flagged for human verification.
-  - `"synthetic_demonstration"` — Explicitly synthetic fixture data created only to demonstrate package structure.
-- `is_synthetic_example`: Boolean (`true` only for demonstration fixtures; `false` for real research).
-- `summary`: Concise objective summary of what the source contains.
-- `content_file`: Relative path `sources/<slug>.md` containing the detailed source notes and context.
-- `excerpts`: Array of structured excerpts (`exc-*`), each containing:
-  - `id`: `^exc-[a-z0-9_-]{2,59}$`
-  - `quoted_text`: Exact quote or data point from the source.
-  - `annotation`: AI or researcher commentary explaining how the excerpt applies to the project.
-  - `location_anchor`: Section, page, or table identifier (e.g., `"Section 4.1, p. 12"`).
-
-### 4.2 Separating Source Content from AI Interpretation
-Inside both `sources/<slug>.md` and `notes/<slug>.md`:
-- Keep verbatim source excerpts inside blockquotes (`> "..."`) or inside `sources/index.json -> excerpts[].quoted_text`.
-- Place AI synthesis, comparisons, and hypotheses in clearly labeled analytical sections (`## Synthesis & Interpretation`, `## Open Uncertainties`).
-- Link every analytical claim in a Note back to its supporting `src-*` or `exc-*` record in `relationships/links.json` using `link_type: "cites"`, `"supports"`, `"contradicts"`, or `"derived_from"`.
-
----
-
-## 5. Knowledge Organization Rules (Section 7.5)
-
-### 5.1 Architectural Distinction: Identifiers, Titles, Folders, Semantic Links, and Visual Wires
-External AI generators and developers must strictly distinguish five concepts:
-
-| Concept | Purpose in Flowden | Package Representation | Flowden DB Mapping (Phase 2) |
-| :--- | :--- | :--- | :--- |
-| **1. Package-Local ID** | Immutable identity inside the `.flowden.zip` archive | `note-thermal-01`, `src-epa-01`, `fld-models` | Mapped during Pass 1 via `packageIdMap` |
-| **2. Flowden DB ID** | Auto-increment integer PK + canonical UUID in MySQL | Never hardcoded in package | `notes.id`, `entities.id`, `entities.uuid` |
-| **3. Display Title** | Human-readable heading shown in UI & search | `"Thermal Performance Summary"` | `notes.title`, `entities.title` |
-| **4. Folder Hierarchy** | Tree containment organizing Notes in the Vault sidebar | `folders.json` + `note.folder_id` | `note_folders.parent_folder_id`, `notes.folder_id` |
-| **5. Semantic Relationship** | Meaning-bearing knowledge graph connection | `relationships/links.json` + inline `[[fkf:...]]` | `entity_links` + `note_links` |
-| **6. Visual Board Wire** | Diagram arrow between cards on a Spatial Board canvas | `optional/spatial-board.json -> connections[]` | `board_item_connections` (**never** `entity_links`) |
-
-> [!WARNING]
-> **Critical Rule:** Never use `relationships/links.json` to represent folder containment, and never treat `optional/spatial-board.json` visual canvas connections (`bcon-*`) as semantic knowledge relationships (`rel-*`).
-
-### 5.2 What Belongs Where
-- **Project Overview (`project/overview.md`)**: Executive summary, research objectives, methodology overview, high-level findings table, and an index of `[[fkf:<note-id>|Note Title]]` links to the core Notes. Imported into Flowden as a **pinned root Note** alongside `projects.description`.
-- **When to Create a New Note (`notes/*.md`)**: Create a separate Note whenever a topic represents a self-contained concept, mechanism, dataset analysis, competing hypothesis, or synthesis module that other Notes will reference independently.
-- **How to Organize Folders (`folders.json`)**: Use 2 to 6 top-level folders (with optional subfolders) reflecting logical phases or domains of the research.
-- **How to Write Useful Note Titles**: Make titles specific and descriptive (e.g., `"Phase-Change Roofing Materials: Empirical Cooling Bounds"`). Even if two Notes intentionally share the same title (e.g., `"Regional Field Trial Summary"` for two different regions), their `id` (`note-trial-summary-arid` vs. `note-trial-summary-humid`) and `disambiguation_hint` (`"Arid Climate Basin"` vs. `"Humid Subtropical Zone"`) keep every link 100% unambiguous.
-- **How to Create Semantic Relationships (`relationships/links.json`)**:
-  Use only Flowden's **10 canonical `link_type` values**:
-  1. `references` — General conceptual reference from one entity to another.
-  2. `embeds` — Source entity embeds content or media from the target entity.
-  3. `cites` — Note or synthesis directly cites a Research Source (`src-*`) or Excerpt (`exc-*`).
-  4. `derived_from` — Target entity is the primary raw material from which the source entity was synthesized.
-  5. `supports` — Source entity provides empirical or logical evidence supporting the target entity.
-  6. `contradicts` — Source entity presents evidence or arguments conflicting with the target entity.
-  7. `inspired_by` — Conceptual or methodological inspiration.
-  8. `depends_on` — Prerequisite dependency (e.g., a Task or Note depends on another Note/Task).
-  9. `blocks` — Source entity blocks progress or validity of the target entity.
-  10. `relates_to` — Symmetric topical association when a more specific verb does not apply.
-- **When to Create Optional Tasks (`optional/tasks.json`)**: Create Tasks only for concrete verification steps, open literature gaps, or follow-up experiments (`status`: `"planned" | "in_progress" | "done"`, `priority`: `"low" | "medium" | "high" | "urgent"`, `due_date`: `null` unless user-specified).
-- **When a Spatial Board Adds Value (`optional/spatial-board.json`)**: Include a Spatial Board when spatial grouping (`groups[]`) and visual flow diagrams (`items[]` + `connections[]`) help the user see how Notes, Sources, and Tasks fit together on a 2D canvas. Every board item representing a Note, Task, Source, or Excerpt MUST set `reference_type` and `reference_package_id` so Flowden projects the canonical entity rather than duplicating text.
-
----
-
-## 6. Package Generation Rules & Formal `.flowden.zip` Structure (Sections 4, 5 & 7.6)
-
-### 6.1 Standard Directory Layout
-Every `.flowden.zip` archive MUST use POSIX forward-slash relative paths anchored at the archive root:
-
-```text
-example-research.flowden.zip
-├── manifest.json                   [REQUIRED] Root package manifest, metadata & entity inventory
-├── project/
-│   └── overview.md                 [REQUIRED] Rich Markdown Project Overview (imported as pinned Note)
-├── folders.json                    [REQUIRED] Hierarchical folder definitions (fld-*)
-├── notes/
-│   ├── note-example-01.md          [REQUIRED] Canonical Markdown Note(s) (at least 1 required)
-│   ├── note-example-02.md
-│   └── note-example-03.md
-├── sources/
-│   ├── index.json                  [REQUIRED] Research Source & Excerpt metadata registry (src-*, exc-*)
-│   ├── source-example-01.md        [OPTIONAL/CONDITIONAL] Required for each source in sources/index.json
-│   └── source-example-02.md
-├── relationships/
-│   └── links.json                  [REQUIRED] Semantic knowledge graph relationships (rel-*)
-├── assets/
-│   └── architecture-diagram.png    [OPTIONAL] Binary/media attachments declared in manifest.json (ast-*)
-├── optional/
-│   ├── tasks.json                  [OPTIONAL] Follow-up research Tasks (tsk-*)
-│   └── spatial-board.json          [OPTIONAL] 2D Spatial Board layout, projections & visual wires (brd-*)
-└── exports/
-    └── research-report.pdf         [OPTIONAL] Readable companion PDF report (non-canonical)
-```
-
-### 6.2 File-by-File Specification
-
-#### 1. `manifest.json` (Required)
-- **Purpose**: Entry-point descriptor declaring format version, generator provenance, project metadata, file inventory, Note descriptors, Asset descriptors (with SHA-256 hashes), and enabled optional modules.
-- **Validation**: Validated against the root of [flowden-package.schema.json](file:///C:/Users/Sod/.gemini/antigravity/scratch/flowden/docs/knowledge-exchange/flowden-package.schema.json) (`#/$defs/ManifestDocument`).
-
-#### 2. `project/overview.md` (Required)
-- **Purpose**: Comprehensive Markdown overview of the research project.
-- **Structure**: Optional YAML frontmatter (`id`, `title`) followed by clean GitHub-Flavored Markdown.
-- **Canonical Storage Mapping**: Imported as a pinned root Note (`notes.is_pinned = 1`, `notes.content = <normalized markdown>`) inside the created/target Project, while `manifest.json -> project.summary` populates `projects.description`.
-
-#### 3. `folders.json` (Required)
-- **Purpose**: Defines the folder tree (`fld-*`) for organizing Notes in the Knowledge Vault.
-- **Structure**: Validated against `#/$defs/FoldersFile`. May contain an empty array `"folders": []` if all Notes live at the root. Maximum nesting depth is `8`; circular `parent_id` chains are forbidden.
-
-#### 4. `notes/*.md` (Required — 1 or more files)
-- **Purpose**: Canonical knowledge Notes.
-- **Structure**:
-  1. **YAML Frontmatter Block** bounded by `---` lines containing:
-     ```yaml
-     ---
-     id: note-urban-canopy-model
-     title: "Thermal Performance Summary"
-     disambiguation_hint: "Urban Canopy Layer"
-     folder_id: fld-empirical-models
-     is_pinned: false
-     verification_status: verified
-     tags:
-       - urban-climate
-       - canopy-modeling
-     ---
-     ```
-  2. **Markdown Body** following the closing `---` line.
-- **Canonical Storage Mapping**: During Phase 2 import, the YAML frontmatter is parsed, cross-checked against `manifest.json -> entities.notes[]`, and stripped; the normalized Markdown body is stored in **`notes.content` (`LONGTEXT`)**, which is Flowden's single authoritative Markdown storage column.
-- **Inline WikiLink Syntax (`[[fkf:<package_id>|Display Title]]`)**:
-  - Whenever a Note links inline to another Note in the package, write:
-    `[[fkf:note-target-id|Target Display Title]]`
-  - During Pass 2 of import, Flowden resolves `note-target-id` via `packageIdMap` to its exact database `notes.id` (inserting directly into `note_links` and `entity_links`) and rewrites the Markdown token to `[[Final Target Title]]` for native rendering in `VaultEditor`.
-- **Inline Asset Reference Syntax**:
-  - Reference package assets using standard Markdown image or link syntax with a relative path:
-    `![Architecture Diagram](../assets/architecture-diagram.png)`
-  - During Pass 2 of import, Flowden validates the asset via `SecurityService.validateUploadedFile`, copies it to `/uploads/vault/fkp_<operation_id>_<uuid>.png`, registers it in `file_uploads`, and rewrites `../assets/architecture-diagram.png` to the authenticated `/uploads/vault/...` URL.
-
-#### 5. `sources/index.json` & `sources/*.md` (Required Index; `.md` files required per source)
-- **Purpose**: Structured registry of Research Sources (`src-*`) and their verbatim Excerpts (`exc-*`).
-- **Validation**: `sources/index.json` is validated against `#/$defs/SourcesIndexFile`. Every `content_file` (`sources/<slug>.md`) must exist in the archive.
-- **Canonical Storage Mapping**: Each source maps to `research_documents` (and `entities` with `entity_type = 'research'`); each item in `excerpts[]` maps to `research_excerpts` (and `entities` with `entity_type = 'excerpt'`).
-
-#### 6. `relationships/links.json` (Required)
-- **Purpose**: Explicit semantic knowledge graph edges (`rel-*`) between package entities.
-- **Validation**: Validated against `#/$defs/RelationshipsFile`. Every `source_id` and `target_id` MUST be a valid package-local ID declared in the package, and `link_type` MUST be one of the 10 canonical enum values.
-
-#### 7. `assets/*` (Optional Directory)
-- **Purpose**: Binary or media files (`PNG`, `JPEG`, `GIF`, `WEBP`, `PDF`, `CSV`, `JSON`, `MP4`, `MP3`, etc.) embedded in Notes.
-- **Validation**: Every file in `assets/` must be declared in `manifest.json -> entities.assets[]` with matching `size_bytes`, `sha256`, and `mime_type`, and must pass `SecurityService.validateUploadedFile` magic-byte inspection.
-
-#### 8. `optional/tasks.json` (Optional Module)
-- **Purpose**: Actionable follow-up research or verification Tasks (`tsk-*`).
-- **Behavior When Absent**: When `manifest.json -> optional_modules.tasks.enabled` is `false` (and `file` is `null`), no Tasks are imported and the package remains 100% valid.
-- **Validation**: When enabled, validated against `#/$defs/OptionalTasksFile`.
-
-#### 9. `optional/spatial-board.json` (Optional Module)
-- **Purpose**: 2D visual canvas (`brd-*`) containing visual groups (`grp-*`), entity projection cards (`bitm-*` with `reference_type` and `reference_package_id`), and visual canvas wires (`bcon-*`).
-- **Behavior When Absent**: When `manifest.json -> optional_modules.spatial_board.enabled` is `false` (and `file` is `null`), no Spatial Board is created during import.
-- **Validation**: When enabled, validated against `#/$defs/OptionalSpatialBoardFile`.
-
-#### 10. `exports/research-report.pdf` (Optional Module)
-- **Purpose**: Optional human-readable PDF companion document.
-- **Behavior When Absent**: When `manifest.json -> optional_modules.research_report_pdf.enabled` is `false`, no companion PDF is imported. Never treated as the source of truth for Notes or Relationships.
-
----
-
-## 7. ZIP Generation Limitations & Manual Packaging Fallback (Section 7.7)
-
-Some external AI chat interfaces (such as standard web chat sessions without a Python/bash code sandbox) cannot directly output a downloadable `.flowden.zip` binary file.
-
-### Fallback Workflow for Non-ZIP AI Environments
-1. **Generate All Required Package Files Individually**:
-   Output each file in sequence with its exact relative path header (`manifest.json`, `project/overview.md`, `folders.json`, `notes/<slug>.md`, `sources/index.json`, `sources/<slug>.md`, `relationships/links.json`, and any enabled `optional/*.json` files).
-2. **Preserve the Exact Directory Tree**:
-   Instruct the user to save the files into an empty directory (for example, `my-research-package/`) matching the exact relative paths in Section 6.1.
-3. **Provide Copy-Paste Packaging Commands**:
-   Provide the user with these exact terminal commands to create the `.flowden.zip` archive with relative root paths (so `manifest.json` sits at the root of the ZIP archive):
-   - **Windows PowerShell**:
-     ```powershell
-     Compress-Archive -Path .\my-research-package\* -DestinationPath .\my-research-package.flowden.zip -Force
-     ```
-   - **macOS / Linux**:
-     ```bash
-     (cd my-research-package && zip -r ../my-research-package.flowden.zip .)
-     ```
-
----
-
-## 8. Worked Example (Section 7.8)
-
-Below is a miniature excerpt from the official reference package (`docs/knowledge-exchange/examples/flowden-reference-package`) illustrating how a research project on **Adaptive Urban Heat-Island Mitigation & High-Albedo Microclimates** is structured across `manifest.json`, `folders.json`, `notes/*.md`, `sources/index.json`, and `relationships/links.json`.
-
-### 8.1 `manifest.json` Excerpt
 ```json
 {
-  "$schema": "https://flowden.app/schemas/flowden-package-v1.0.0.schema.json",
-  "format": "flowden-knowledge-package",
-  "fkf_version": "1.0.0",
-  "min_compatible_fkf_version": "1.0.0",
-  "package_id": "pkg-urban-heat-reference-01",
+  "format": "flowden-knowledge-format",
+  "fkf_version": "2.0.0",
+  "min_reader_version": "2.0.0",
+  "package_id": "pkg-example-quantum-algorithms",
   "generator": {
-    "system_name": "Flowden Architecture Reference Generator",
-    "model_identifier": "fkf-reference-fixture-v1",
-    "generated_at": "2026-11-07T04:30:00Z",
-    "spec_version": "1.0.0",
-    "research_prompt_summary": "Reference demonstration package modeling urban heat-island mitigation strategies, cool-roof albedo bounds, and vegetative evapotranspiration.",
-    "contains_synthetic_sources": true
+    "name": "Claude 3.7 Sonnet Research Assistant",
+    "version": "1.0.0",
+    "model": "claude-3-7-sonnet",
+    "prompt_topic": "Quantum error correction surface codes",
+    "generated_at": "2026-11-09T10:00:00Z",
+    "contains_synthetic_sources": false
   },
   "project": {
-    "id": "proj-urban-heat-mitigation",
-    "title": "Adaptive Urban Heat-Island Mitigation",
-    "summary": "Structured synthesis of high-albedo surface retrofits and vegetative canopy cooling models (Reference Demonstration Package).",
-    "overview_file": "project/overview.md",
+    "id": "proj-quantum-error-correction",
+    "title": "Quantum Error Correction: Surface Codes & Fault Tolerance",
+    "summary": "Deep technical analysis of topological 2D surface codes and fault-tolerant threshold theorems.",
+    "overview_markdown": "# Quantum Error Correction\n\nComprehensive synthesis of surface codes...",
     "color": "#6366f1",
-    "icon": "layers",
-    "tags": ["urban-climate", "albedo", "microclimate"]
+    "icon": "cpu",
+    "tags": ["quantum", "physics", "error-correction"]
   },
-  "index_files": {
-    "folders": "folders.json",
-    "sources": "sources/index.json",
-    "relationships": "relationships/links.json"
+  "folders": [
+    {
+      "id": "fld-foundations",
+      "name": "01 Foundations",
+      "parent_id": null,
+      "sort_order": 0
+    },
+    {
+      "id": "fld-surface-codes",
+      "name": "02 Surface Codes",
+      "parent_id": null,
+      "sort_order": 1
+    }
+  ],
+  "notes": [
+    {
+      "id": "note-stabilizer-formalism",
+      "title": "The Stabilizer Formalism in Quantum Codes",
+      "folder_id": "fld-foundations",
+      "content_markdown": "# Stabilizer Formalism\n\nStabilizer codes use Abelian subgroups of the Pauli group [[fkf:note-toric-code|Toric and Surface Codes]] to define code spaces...",
+      "tags": ["quantum-mechanics", "stabilizers"],
+      "is_pinned": true
+    },
+    {
+      "id": "note-toric-code",
+      "title": "Kitaev's Toric Code & Planar Surface Codes",
+      "folder_id": "fld-surface-codes",
+      "content_markdown": "# Toric and Surface Codes\n\nIntroduced by Alexei Kitaev, the toric code provides topological protection against local perturbations...",
+      "tags": ["surface-code", "topology"],
+      "is_pinned": false
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-kitaev-2003",
+      "title": "Fault-tolerant quantum computation by anyons",
+      "source_type": "journal_article",
+      "verification_status": "verified",
+      "authors": ["Alexei Kitaev"],
+      "publication_date": "2003-01-15",
+      "source_url": "https://doi.org/10.1016/S0003-4916(02)00018-0",
+      "summary": "Foundational paper introducing anyonic quantum memory and topological error correction.",
+      "content_text": "We present an approach to quantum computation based on topological quantum field theories...",
+      "tags": ["foundational", "anyons"],
+      "excerpts": [
+        {
+          "id": "exc-kitaev-anyon-braiding",
+          "quoted_text": "The memory consists of a physical spin lattice on a surface whose topology protects quantum states against local perturbations.",
+          "annotation": "Core definition of topological code stability",
+          "location_anchor": "Section 2, p. 4",
+          "color": "#fef08a"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel-stabilizer-to-toric",
+      "source_id": "note-stabilizer-formalism",
+      "target_id": "note-toric-code",
+      "link_type": "supports",
+      "context_snippet": "The stabilizer formalism provides the mathematical substrate for the toric code Hamiltonian."
+    },
+    {
+      "id": "rel-source-to-toric",
+      "source_id": "src-kitaev-2003",
+      "target_id": "note-toric-code",
+      "link_type": "cites",
+      "context_snippet": "Kitaev 2003 is the primary origin of planar surface codes."
+    }
+  ],
+  "optional_modules": {
+    "tasks": {
+      "tasks": [
+        {
+          "id": "tsk-simulate-threshold",
+          "title": "Simulate error threshold using MWPM decoder",
+          "description": "Run Monte Carlo simulations of Minimum-Weight Perfect Matching on rotated surface code lattice.",
+          "status": "planned",
+          "priority": "high",
+          "due_date": null,
+          "sort_order": 0,
+          "related_entity_ids": ["note-toric-code"]
+        }
+      ]
+    },
+    "spatial_board": {
+      "board": {
+        "id": "brd-qec-overview",
+        "title": "Quantum Error Correction Synthesis Board",
+        "description": "2D topological layout of codes and relationships",
+        "groups": [
+          {
+            "id": "grp-foundations",
+            "title": "Foundational Formalisms",
+            "color": "#3b82f6",
+            "position_x": 100,
+            "position_y": 100,
+            "width": 400,
+            "height": 500
+          }
+        ],
+        "items": [
+          {
+            "id": "bitm-stabilizers",
+            "item_type": "note",
+            "reference_package_id": "note-stabilizer-formalism",
+            "group_id": "grp-foundations",
+            "title": "Stabilizer Formalism",
+            "content": "Mathematical foundation",
+            "position_x": 120,
+            "position_y": 140,
+            "width": 240,
+            "height": 160,
+            "color": "#ffffff"
+          }
+        ],
+        "connections": []
+      }
+    }
   }
 }
 ```
 
-### 8.2 Demonstrating Stable IDs with Identical Note Titles
-Notice how `note-example-01` and `note-example-02` intentionally share the exact same display title (`"Thermal Performance Summary"`) for two different subsystems, while their stable package-local IDs (`note-example-01` vs. `note-example-02`) and `disambiguation_hint` values keep every WikiLink and semantic relationship 100% unambiguous:
+---
 
-- `notes/note-example-01.md`:
-  - `id`: `note-example-01`
-  - `title`: `"Thermal Performance Summary"`
-  - `disambiguation_hint`: `"High-Albedo Cool Roof Membranes"`
-- `notes/note-example-02.md`:
-  - `id`: `note-example-02`
-  - `title`: `"Thermal Performance Summary"`
-  - `disambiguation_hint`: `"Vegetative Canopy Evapotranspiration"`
-- `notes/note-example-03.md`:
-  - Links unambiguously to both notes via `[[fkf:note-example-01|Thermal Performance Summary (Cool Roofs)]]` and `[[fkf:note-example-02|Thermal Performance Summary (Vegetative Canopy)]]`.
+## 4. Complete Prompt Template for External AI Models
+
+Copy and paste the prompt below into **Claude**, **ChatGPT**, **Gemini**, or **NotebookLM** when conducting research:
+
+```markdown
+You are an expert research synthesizer and Knowledge Architect. Your task is to conduct thorough, rigorous research on the specified topic and export the complete findings as a valid Flowden Knowledge Format (FKF 2.0) JSON document.
+
+### Research Requirements:
+1. Topic: [INSERT YOUR TOPIC HERE]
+2. Target Depth: Deep technical/academic synthesis with verbatim source citations.
+3. Structure: Decompose findings logically into separate, well-scoped notes within a hierarchical folder structure. Do NOT merge everything into a single note.
+4. Sources: Every cited claim must reference an entry in `sources` with verbatim excerpts in `excerpts` and precise location anchors.
+5. Links: Interconnect notes using inline WikiLinks `[[fkf:note-...|Display Title]]` and populate the `relationships` array using valid link types (`references`, `embeds`, `cites`, `derived_from`, `supports`, `contradicts`, `inspired_by`, `depends_on`, `blocks`, `relates_to`).
+6. Identifiers: Use strict lowercase prefixed IDs (`pkg-...`, `proj-...`, `fld-...`, `note-...`, `src-...`, `exc-...`, `rel-...`, `tsk-...`, `brd-...`).
+7. Forbidden Fields: Do NOT include `database_id`, `dbId`, `user_id`, `created_at`, or `updated_at`.
+8. Output Format: Output ONLY raw, valid JSON conforming to Flowden Knowledge Format 2.0 (`"format": "flowden-knowledge-format"`, `"fkf_version": "2.0.0"`).
+```
 
 ---
 
-## 9. Package Validation & Security Contract (Section 9)
+## 5. Import Modes in Flowden
 
-> [!CAUTION]
-> **Untrusted Input Contract:** Every `.flowden.zip` archive originates outside Flowden's trust boundary. The Phase 2 importer MUST enforce all validation and security gates below **before** committing any entity or exposing any file.
+When the user uploads or pastes an `.fkf` package into Flowden, they may select between two destination modes:
 
-### 9.1 Intended Archive & Extraction Security Limits
-1. **Maximum Archive Entries:** `500` total entries (files + directories).
-2. **Maximum Total Uncompressed Size:** `250 MB` (`262,144,000` bytes), enforced both via central directory header inspection and live byte-counting streams during extraction.
-3. **Maximum Single-File Uncompressed Size:** `50 MB` (`52,428,800` bytes).
-4. **Maximum Compression Ratio:** `100:1` (overall and per-entry) to defeat ZIP bombs.
-5. **ZIP Slip & Path Traversal Rejection:** Any entry containing `..`, leading `/` or `\`, drive letters (`C:`), or null bytes is immediately rejected (`SECURITY_PATH_TRAVERSAL`).
-6. **Symlink & Special File Rejection:** Any ZIP entry with POSIX symlink (`0120000`), FIFO, socket, or block/char device external attributes is rejected (`SECURITY_SYMLINK_REJECTED`).
-7. **Binary Magic-Byte Inspection & Disguised Executable Rejection:** Every binary file in `assets/` and `exports/` must pass [`SecurityService.validateUploadedFile`](file:///C:/Users/Sod/.gemini/antigravity/scratch/flowden/server/services/securityService.js#L370-L511) and match its declared `sha256` and `mime_type`. Executables (`MZ`, `ELF`, Mach-O, `#!`, `.exe`, `.dll`, `.bat`, `.ps1`, `.sh`, `.js`) are unconditionally rejected.
-8. **Markdown & URL Sanitization:** Every external URL in `sources/index.json` or Markdown bodies is checked via [`SecurityService.validateExternalUrl`](file:///C:/Users/Sod/.gemini/antigravity/scratch/flowden/server/services/securityService.js#L562-L636) (blocking `javascript:`, `data:`, `file:`, loopback, and private RFC1918 IPs). Raw `<script>`, `<iframe>`, `<object>`, `<embed>`, and inline `on*=` attributes in Markdown are stripped.
-9. **Untrusted AI Context Framing:** After import, any Note or Source sent to Flowden's AI Assistant or MCP tools continues to be wrapped by [`SecurityService.wrapUntrustedWorkspaceData`](file:///C:/Users/Sod/.gemini/antigravity/scratch/flowden/server/services/securityService.js#L687-L701).
+### Mode A: Create New Project
+- Creates a fresh Flowden Project using the package metadata (`title`, `summary`, `color`, `icon`).
+- Establishes a brand-new workspace containing all folders, notes, sources, excerpts, and relationships.
 
-### 9.2 Structural & Referential Error Catalogue
-The Phase 2 validator must reject or flag the following conditions:
-
-| Condition | Error / Warning Code | Severity | Importer Behavior |
-| :--- | :--- | :--- | :--- |
-| `fkf_version` major version `> 1` | `UNSUPPORTED_FKF_MAJOR_VERSION` | `FATAL` | Reject package before staging; explain required Flowden version. |
-| Duplicate `id` anywhere in package | `DUPLICATE_PACKAGE_ID` | `FATAL` | Reject package; list colliding IDs and file locations. |
-| Duplicate Note `id` in `manifest.json` or frontmatter | `DUPLICATE_NOTE_ID` | `FATAL` | Reject package. |
-| `source_id`, `target_id`, `folder_id`, or `reference_package_id` does not exist | `MISSING_RELATIONSHIP_TARGET` | `FATAL` | Reject package; report exact unresolved ID. |
-| Declared asset missing from `assets/` or SHA-256 mismatch | `MISSING_OR_CORRUPT_ASSET` | `FATAL` | Reject package. |
-| JSON file fails `flowden-package.schema.json` validation | `INVALID_PACKAGE_SCHEMA` | `FATAL` | Reject package with JSON Pointer path and schema violation message. |
-| YAML frontmatter missing closing `---` or mismatched `id` | `MALFORMED_MARKDOWN_FRONTMATTER` | `FATAL` | Reject package with file path and line number. |
-| Unrecognized optional module in `1.x` minor version | `UNKNOWN_OPTIONAL_MODULE` | `WARNING` | Skip unknown optional module; allow core import after notifying user. |
-| `source_url` fails `SecurityService.validateExternalUrl` | `INVALID_OR_BLOCKED_SOURCE_URL` | `WARNING` | Sanitize `source_url` to `null` and flag in validation report before user approval. |
-
----
-
-## 10. Future Import Workflow, Conflict Resolution & Shared Importer Architecture (Sections 10, 11 & 12)
-
-### 10.1 Ten-Step User-Approved Import Flow (Planned Phase 2+)
-1. **Select Archive:** User selects a `.flowden.zip` file.
-2. **Safe Archive Inspection:** Flowden inspects ZIP headers (entry count, uncompressed size, compression ratio, path safety, symlink flags) and extracts to isolated staging (`temp/fkp_stage_<operation_id>/`).
-3. **Schema & Cross-File Validation:** Flowden validates all JSON files against [flowden-package.schema.json](file:///C:/Users/Sod/.gemini/antigravity/scratch/flowden/docs/knowledge-exchange/flowden-package.schema.json), checks YAML frontmatter, verifies SHA-256 checksums, runs `SecurityService.validateUploadedFile` on assets, and verifies 100% of package-local ID references.
-4. **Validation Report Presentation:** Flowden displays a structured Validation Report (passing checks, warnings, synthetic source disclosures, and any errors).
-5. **Interactive Workspace Preview:** User inspects the proposed Project, Folder tree, Note list, Research Sources, Excerpts, Relationship graph summary, and Assets.
-6. **Destination Selection:** User chooses:
-   - **Mode A (Default):** Create a new Project (`projects` row).
-   - **Mode B:** Import into an existing Project (requires `editor` or `owner` permission).
-7. **Optional Module Selection:** User toggles whether to import `optional/tasks.json`, `optional/spatial-board.json`, and `exports/research-report.pdf`.
-8. **ID Mapping & Conflict Resolution Policy:** Flowden computes deterministic conflict resolution (never overwriting existing user data silently).
-9. **Explicit User Approval:** User clicks **Approve & Import Knowledge Package**.
-10. **Crash-Safe Transactional Commit:** Flowden executes the persistent journaled commit (`committing_files -> committing_db -> committed`) and opens the imported Project.
-
-### 10.2 Conflict Resolution Rules (Never Overwrite User Data Silently)
-- **Project Title Already Exists:** In Mode A (Create New Project), if a Project with the same title exists, append a suffix (e.g., `"Adaptive Urban Heat-Island Mitigation (Imported 2026-11-07)"`) or let the user edit the target title in the preview modal.
-- **Note with the Same Title Exists (Within Package or Existing Project):**
-  - If two Notes inside the package share the same `title` (or collide with an existing Note in Mode B), Flowden appends the Note's `disambiguation_hint` (or package ID if no hint is provided), e.g., `"Thermal Performance Summary (High-Albedo Cool Roof Membranes)"`.
-  - Because Pass 2 resolves `[[fkf:<id>|...]]` via `packageIdMap` after `finalTitle` is assigned, every WikiLink and `note_links` / `entity_links` row points to the exact intended Note even after renaming.
-- **Package-Local ID Conflicts Across Repeated Imports:** Package-local IDs (`note-example-01`) are scoped to a single import operation and mapped to fresh auto-increment database IDs (`notes.id`) and fresh UUIDs (`entities.uuid`), so importing two packages that both use `note-example-01` never causes a primary-key collision.
-- **Duplicate Source Records:** When importing into an existing Project that already has a `research_documents` record with the same `title` and `source_url`, the user may choose in preview to reuse the existing source record or create a new copy.
-- **Existing Assets:** Promoted asset filenames are uniquely namespaced (`uploads/vault/fkp_<operation_id>_<uuid>.<ext>`), so they never overwrite existing files on disk.
-
-### 10.3 Shared Importer Entry Points (Planned Phase 2+)
-Flowden will implement **one shared backend validation and import service** (`KnowledgeExchangeService`) exposed through two UI entry points:
-1. **AI Assistant — Knowledge Exchange (Primary Entry Point):** Allows users to read the guide, download `FLOWDEN_RESEARCH_SPEC.md`, download `flowden-package.schema.json`, download `flowden-reference-package.flowden.zip`, and upload/preview/import a `.flowden.zip` package.
-2. **Research Center (Secondary Entry Point):** Provides an **"Import Knowledge Package (.flowden.zip)"** button alongside (and kept strictly separate from) the existing single-document (`PDF`/`DOCX`/`MD`/`TXT`) upload modal. Both UI entry points invoke the exact same backend validation and import pipeline.
-3. **Quick Capture (Unchanged):** Quick Capture remains a lightweight staging inbox for single text snippets, links, and images; it is never used for multi-entity Knowledge Package imports.
-
-### 10.4 Versioning & Forward Compatibility Rules
-- **Initial Format Version:** `"fkf_version": "1.0.0"`.
-- **Backward & Forward Compatibility:** Minor version increments (`1.1.0`, `1.2.0`) must be strictly additive. A `1.0` importer accepts any `1.x` package, ignoring unknown optional modules with a warning while rejecting unsupported major versions (`2.0.0+`) cleanly during validation.
+### Mode B: Merge into Existing Project
+- Merges the incoming knowledge package directly into an existing Flowden Project.
+- **Permission Check:** The authenticated user must be an **Owner** or **Editor** of the destination project. Viewers or non-members are strictly forbidden (HTTP 403).
+- **Metadata Protection:** The existing project's title, summary, color, icon, and overview are preserved unchanged.
+- Folders, notes, and sources are seamlessly appended, preserving cross-project referential integrity.

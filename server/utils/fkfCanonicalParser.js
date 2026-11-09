@@ -2,6 +2,9 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { validateFkfV2Document } = require('./fkfSchemaValidator');
+
+const FORBIDDEN_DB_PROPERTIES = ['database_id', 'dbId', 'user_id', 'created_at', 'updated_at'];
 
 /**
  * Strips YAML frontmatter from a Markdown string.
@@ -45,7 +48,6 @@ function stripYamlFrontmatter(markdownText) {
       let val = kv[2].trim();
 
       if (!val) {
-        // Could be start of a YAML array
         currentArrayKey = key;
         frontmatter[key] = [];
         continue;
@@ -56,7 +58,7 @@ function stripYamlFrontmatter(markdownText) {
       if (val.startsWith('[') && val.endsWith(']')) {
         const items = val.slice(1, -1).split(',').map(s => {
           let item = s.trim();
-          if ((item.startsWith('"') && item.endsWith('"')) || (item.startsWith("'") && item.endsWith("'"))) {
+          if ((item.startsWith('"') && item.endsWith('"')) || (item.startsWith("'") && val.endsWith("'"))) {
             item = item.slice(1, -1);
           }
           return item;
@@ -107,6 +109,110 @@ function computeDeterministicSha256(canonicalPackage) {
 }
 
 /**
+ * Extract all [[fkf:...]] WikiLink occurrences from Markdown text without modifying them.
+ */
+function extractFkfWikiLinks(markdownText) {
+  const text = String(markdownText || '');
+  const results = [];
+  const regex = /\[\[fkf:([^\]]*)\]\]/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const rawToken = match[0];
+    const inner = match[1];
+    const pipeIdx = inner.indexOf('|');
+    const targetId = (pipeIdx === -1 ? inner : inner.slice(0, pipeIdx)).trim();
+    const label = pipeIdx === -1 ? null : inner.slice(pipeIdx + 1).trim();
+    const validSyntax = /^[a-z][a-z0-9_-]{1,63}$/i.test(targetId) && (label === null || label.length > 0);
+    results.push({
+      rawToken,
+      targetId,
+      label,
+      validSyntax
+    });
+  }
+  return results;
+}
+
+/**
+ * Scans object recursively for forbidden database-owned properties.
+ */
+function scanForbiddenDbProperties(obj, pointer = '#', outErrors = []) {
+  if (obj === null || typeof obj !== 'object') return outErrors;
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      scanForbiddenDbProperties(obj[i], `${pointer}[${i}]`, outErrors);
+    }
+    return outErrors;
+  }
+  for (const [key, val] of Object.entries(obj)) {
+    if (FORBIDDEN_DB_PROPERTIES.includes(key)) {
+      outErrors.push({
+        code: 'FORBIDDEN_DATABASE_PROPERTY',
+        pointer: `${pointer}.${key}`,
+        message: `Forbidden database-owned property "${key}" found at ${pointer}.${key}. External packages must not supply database-managed IDs or timestamps.`
+      });
+    }
+    scanForbiddenDbProperties(val, `${pointer}.${key}`, outErrors);
+  }
+  return outErrors;
+}
+
+/**
+ * Validates folder hierarchy for missing parents, cycles, and max depth (8).
+ */
+function validateFolderHierarchy(folders) {
+  const errors = [];
+  const folderMap = new Map();
+  for (const f of folders) {
+    folderMap.set(f.id, f);
+  }
+
+  for (const f of folders) {
+    if (f.parent_id !== null && f.parent_id !== undefined) {
+      if (!folderMap.has(f.parent_id)) {
+        errors.push({
+          code: 'MISSING_FOLDER_PARENT',
+          file: 'folders',
+          entityId: f.id,
+          message: `Folder "${f.id}" references non-existent parent_id "${f.parent_id}".`
+        });
+      }
+    }
+  }
+
+  for (const f of folders) {
+    const visited = new Set([f.id]);
+    let cur = f;
+    let depth = 1;
+    while (cur && cur.parent_id) {
+      if (visited.has(cur.parent_id)) {
+        errors.push({
+          code: 'FOLDER_HIERARCHY_CYCLE',
+          file: 'folders',
+          entityId: f.id,
+          message: `Circular folder hierarchy detected involving folder "${f.id}" and "${cur.parent_id}".`
+        });
+        break;
+      }
+      visited.add(cur.parent_id);
+      cur = folderMap.get(cur.parent_id);
+      depth += 1;
+      if (depth > 8) {
+        errors.push({
+          code: 'FOLDER_DEPTH_EXCEEDED',
+          file: 'folders',
+          entityId: f.id,
+          message: `Folder "${f.id}" exceeds maximum hierarchy depth of 8.`
+        });
+        break;
+      }
+    }
+  }
+
+  return errors;
+}
+
+/**
  * Parses and validates an FKF 2.0 JSON document (or object).
  * Normalizes to InternalCanonicalPackage.
  *
@@ -141,7 +247,24 @@ function parseFkfDocument(rawInput) {
     };
   }
 
-  // 1. Format check: FKF 2.0 strictly requires "flowden-knowledge-format"
+  // 1. Check for forbidden database-owned properties anywhere in document
+  scanForbiddenDbProperties(doc, '#', errors);
+
+  // 2. Validate against FKF v2 JSON Schema (Draft 2020-12)
+  try {
+    const schemaErrors = validateFkfV2Document(doc, 'package.fkf');
+    for (const se of schemaErrors) {
+      // Map schema validation errors to structured errors
+      errors.push(se);
+    }
+  } catch (schemaEx) {
+    errors.push({
+      code: 'SCHEMA_VALIDATION_ERROR',
+      message: `Schema validator failure: ${schemaEx.message}`
+    });
+  }
+
+  // 3. Format check: FKF 2.0 strictly requires "flowden-knowledge-format"
   if (doc.format !== 'flowden-knowledge-format') {
     errors.push({
       code: 'UNSUPPORTED_FORMAT',
@@ -149,7 +272,7 @@ function parseFkfDocument(rawInput) {
     });
   }
 
-  // 2. Version check: FKF 2.0 strictly requires major version 2
+  // 4. Version check: FKF 2.0 strictly requires major version 2
   if (!doc.fkf_version || typeof doc.fkf_version !== 'string' || !/^2\.\d+\.\d+/.test(doc.fkf_version)) {
     errors.push({
       code: 'UNSUPPORTED_VERSION',
@@ -158,16 +281,42 @@ function parseFkfDocument(rawInput) {
   }
   const version = doc.fkf_version;
 
-  // 3. Package ID: strictly required, do not synthesize
-  if (!doc.package_id || typeof doc.package_id !== 'string' || !/^[a-z][a-z0-9_-]{2,63}$/i.test(doc.package_id)) {
+  // Global ID Registry to enforce package-wide uniqueness and track valid entity IDs
+  const packageIdRegistry = new Map();
+  function registerPackageEntityId(id, entityType, fileLabel = 'package.fkf') {
+    if (!id || typeof id !== 'string') return;
+    if (packageIdRegistry.has(id)) {
+      const prev = packageIdRegistry.get(id);
+      errors.push({
+        code: 'DUPLICATE_PACKAGE_ID',
+        file: fileLabel,
+        entityId: id,
+        message: `Duplicate package-local ID "${id}" detected (collides with ${prev.entityType}).`
+      });
+    } else {
+      packageIdRegistry.set(id, { id, entityType });
+    }
+  }
+
+  // 5. Package ID: strictly required, do not synthesize, must use prefix pkg-
+  if (!doc.package_id || typeof doc.package_id !== 'string' || !/^[a-z][a-z0-9_-]{1,63}$/i.test(doc.package_id)) {
     errors.push({
       code: 'MISSING_PACKAGE_ID',
       message: `Missing or invalid package_id: "${doc.package_id}". Required 3-64 chars (alphanumeric, underscore, hyphen).`
     });
+  } else if (!/^(?:pkg|package)-/i.test(doc.package_id)) {
+    errors.push({
+      code: 'INVALID_ID_PREFIX',
+      entityId: doc.package_id,
+      message: `Package ID "${doc.package_id}" must start with prefix "pkg-".`
+    });
   }
   const packageId = doc.package_id;
+  if (packageId) {
+    registerPackageEntityId(packageId, 'package');
+  }
 
-  // 4. Project: strictly required id and title, do not synthesize
+  // 6. Project: strictly required id and title, do not synthesize
   if (!doc.project || typeof doc.project !== 'object') {
     errors.push({
       code: 'MISSING_PROJECT',
@@ -179,7 +328,16 @@ function parseFkfDocument(rawInput) {
         code: 'MISSING_PROJECT_ID',
         message: 'project.id is required and cannot be empty.'
       });
+    } else if (!/^(?:proj|project)-/i.test(doc.project.id)) {
+      errors.push({
+        code: 'INVALID_ID_PREFIX',
+        entityId: doc.project.id,
+        message: `Project ID "${doc.project.id}" must start with prefix "proj-".`
+      });
+    } else {
+      registerPackageEntityId(doc.project.id, 'project');
     }
+
     if (!doc.project.title || typeof doc.project.title !== 'string' || !doc.project.title.trim()) {
       errors.push({
         code: 'MISSING_PROJECT_TITLE',
@@ -193,7 +351,7 @@ function parseFkfDocument(rawInput) {
   const projSummary = doc.project ? (doc.project.summary || doc.project.description || '') : '';
   const projOverview = (doc.project && (doc.project.overview_markdown || doc.project.overview)) || `# ${projTitle}\n\n${projSummary}`;
 
-  // 5. Folders
+  // 7. Folders
   const rawFolders = Array.isArray(doc.folders) ? doc.folders : [];
   const folders = [];
   const folderIdSet = new Set();
@@ -205,10 +363,18 @@ function parseFkfDocument(rawInput) {
       continue;
     }
     const fid = rf.id.trim();
+    if (!/^(?:fld|folder)-/i.test(fid)) {
+      errors.push({
+        code: 'INVALID_ID_PREFIX',
+        entityId: fid,
+        message: `Folder ID "${fid}" must start with prefix "fld-".`
+      });
+    }
     if (folderIdSet.has(fid)) {
       errors.push({ code: 'DUPLICATE_FOLDER_ID', message: `Duplicate folder id: "${fid}".` });
     }
     folderIdSet.add(fid);
+    registerPackageEntityId(fid, 'folder');
 
     folders.push({
       id: fid,
@@ -218,7 +384,13 @@ function parseFkfDocument(rawInput) {
     });
   }
 
-  // 6. Notes: strictly requires at least one valid note, do not synthesize IDs
+  // Validate folder hierarchy (missing parent, cycles, depth)
+  if (folders.length > 0) {
+    const hierarchyErrors = validateFolderHierarchy(folders);
+    errors.push(...hierarchyErrors);
+  }
+
+  // 8. Notes: strictly requires at least one valid note, do not synthesize IDs
   if (!doc.notes || !Array.isArray(doc.notes) || doc.notes.length === 0) {
     errors.push({
       code: 'MISSING_NOTES',
@@ -237,10 +409,18 @@ function parseFkfDocument(rawInput) {
       continue;
     }
     const nid = rn.id.trim();
+    if (!/^(?:note|n)-/i.test(nid)) {
+      errors.push({
+        code: 'INVALID_ID_PREFIX',
+        entityId: nid,
+        message: `Note ID "${nid}" must start with prefix "note-".`
+      });
+    }
     if (noteIdSet.has(nid)) {
       errors.push({ code: 'DUPLICATE_NOTE_ID', message: `Duplicate note id: "${nid}".` });
     }
     noteIdSet.add(nid);
+    registerPackageEntityId(nid, 'note');
 
     // Accept content or content_markdown
     const rawContent = rn.content !== undefined ? rn.content : (rn.content_markdown !== undefined ? rn.content_markdown : '');
@@ -251,6 +431,14 @@ function parseFkfDocument(rawInput) {
       errors.push({ code: 'MISSING_NOTE_TITLE', message: `Note "${nid}" is missing required "title".` });
     }
     const folderId = rn.folder_id !== undefined ? rn.folder_id : (frontmatter.folder_id || null);
+
+    if (folderId !== null && folderId !== undefined && !folderIdSet.has(folderId)) {
+      errors.push({
+        code: 'MISSING_NOTE_FOLDER',
+        entityId: nid,
+        message: `Note "${nid}" references non-existent folder_id "${folderId}".`
+      });
+    }
 
     let tags = [];
     if (Array.isArray(rn.tags)) {
@@ -269,7 +457,7 @@ function parseFkfDocument(rawInput) {
     });
   }
 
-  // 7. Sources
+  // 9. Sources
   const rawSources = Array.isArray(doc.sources) ? doc.sources : [];
   const sources = [];
   const sourceIdSet = new Set();
@@ -281,17 +469,35 @@ function parseFkfDocument(rawInput) {
       continue;
     }
     const sid = rs.id.trim();
+    if (!/^(?:src|source)-/i.test(sid)) {
+      errors.push({
+        code: 'INVALID_ID_PREFIX',
+        entityId: sid,
+        message: `Source ID "${sid}" must start with prefix "src-".`
+      });
+    }
     if (sourceIdSet.has(sid)) {
       errors.push({ code: 'DUPLICATE_SOURCE_ID', message: `Duplicate source id: "${sid}".` });
     }
     sourceIdSet.add(sid);
+    registerPackageEntityId(sid, 'research');
 
     const excerpts = [];
     if (Array.isArray(rs.excerpts)) {
       for (let j = 0; j < rs.excerpts.length; j++) {
         const re = rs.excerpts[j];
+        const eid = (re.id || `exc-${sid}-${j + 1}`).trim();
+        if (!/^(?:exc|excerpt)-/i.test(eid)) {
+          errors.push({
+            code: 'INVALID_ID_PREFIX',
+            entityId: eid,
+            message: `Excerpt ID "${eid}" must start with prefix "exc-".`
+          });
+        }
+        registerPackageEntityId(eid, 'excerpt');
+
         excerpts.push({
-          id: re.id || `exc-${sid}-${j + 1}`,
+          id: eid,
           quoted_text: String(re.quoted_text || re.text || '').trim(),
           annotation: re.annotation || null,
           location_anchor: re.location_anchor || `page-${j + 1}`,
@@ -310,17 +516,185 @@ function parseFkfDocument(rawInput) {
       source_url: rs.source_url || rs.url || null,
       summary: rs.summary || '',
       content_text: rs.content_text || rs.content || '',
+      tags: Array.isArray(rs.tags) ? rs.tags : [],
+      is_synthetic_example: Boolean(rs.is_synthetic_example),
       excerpts
     });
   }
 
-  // 8. Relationships
+  // 10. Optional modules (tasks, spatial_board)
+  const optionalModules = {
+    tasks: { tasks: [] },
+    spatial_board: null
+  };
+
+  const tasksContainer = (doc.optional_modules && doc.optional_modules.tasks) || (Array.isArray(doc.tasks) ? { tasks: doc.tasks } : null);
+  if (tasksContainer && Array.isArray(tasksContainer.tasks)) {
+    optionalModules.tasks.tasks = tasksContainer.tasks.map((t, idx) => {
+      const tid = (t.id || `tsk-${idx + 1}`).trim();
+      if (!/^(?:tsk|task)-/i.test(tid)) {
+        errors.push({
+          code: 'INVALID_ID_PREFIX',
+          entityId: tid,
+          message: `Task ID "${tid}" must start with prefix "tsk-".`
+        });
+      }
+      registerPackageEntityId(tid, 'task');
+
+      return {
+        id: tid,
+        title: (t.title || `Task ${idx + 1}`).trim(),
+        description: t.description || null,
+        status: t.status || 'planned',
+        priority: t.priority || 'medium',
+        due_date: t.due_date || null,
+        sort_order: typeof t.sort_order === 'number' ? t.sort_order : idx,
+        related_entity_ids: Array.isArray(t.related_entity_ids) ? t.related_entity_ids : []
+      };
+    });
+
+    // Check task cross references
+    for (const t of optionalModules.tasks.tasks) {
+      for (const relId of t.related_entity_ids || []) {
+        if (!packageIdRegistry.has(relId)) {
+          errors.push({
+            code: 'MISSING_RELATIONSHIP_TARGET',
+            entityId: t.id,
+            message: `Task "${t.id}" references non-existent related_entity_id "${relId}".`
+          });
+        }
+      }
+    }
+  }
+
+  const boardContainer = (doc.optional_modules && doc.optional_modules.spatial_board) || doc.spatial_board || (doc.board ? { board: doc.board } : null);
+  if (boardContainer && boardContainer.board) {
+    const b = boardContainer.board;
+    const bid = (b.id || 'brd-1').trim();
+    if (!/^(?:brd|board)-/i.test(bid)) {
+      errors.push({
+        code: 'INVALID_ID_PREFIX',
+        entityId: bid,
+        message: `Board ID "${bid}" must start with prefix "brd-".`
+      });
+    }
+    registerPackageEntityId(bid, 'board');
+
+    const groups = [];
+    const groupIds = new Set();
+    for (const g of b.groups || []) {
+      const gid = (g.id || '').trim();
+      if (!/^(?:grp|group)-/i.test(gid)) {
+        errors.push({
+          code: 'INVALID_ID_PREFIX',
+          entityId: gid,
+          message: `Board Group ID "${gid}" must start with prefix "grp-".`
+        });
+      }
+      groupIds.add(gid);
+      registerPackageEntityId(gid, 'board_group');
+      groups.push(g);
+    }
+
+    const items = [];
+    const itemIds = new Set();
+    for (const item of b.items || []) {
+      const itmid = (item.id || '').trim();
+      if (!/^(?:bitm|itm|item)-/i.test(itmid)) {
+        errors.push({
+          code: 'INVALID_ID_PREFIX',
+          entityId: itmid,
+          message: `Board Item ID "${itmid}" must start with prefix "bitm-".`
+        });
+      }
+      itemIds.add(itmid);
+      registerPackageEntityId(itmid, 'board_item');
+
+      if (item.group_id && !groupIds.has(item.group_id)) {
+        errors.push({
+          code: 'MISSING_BOARD_GROUP_TARGET',
+          entityId: itmid,
+          message: `Board item "${itmid}" references non-existent group_id "${item.group_id}".`
+        });
+      }
+      if (item.reference_package_id && !packageIdRegistry.has(item.reference_package_id)) {
+        errors.push({
+          code: 'MISSING_RELATIONSHIP_TARGET',
+          entityId: itmid,
+          message: `Board item "${itmid}" projects non-existent reference_package_id "${item.reference_package_id}".`
+        });
+      }
+      items.push(item);
+    }
+
+    const connections = [];
+    for (const conn of b.connections || []) {
+      const cid = (conn.id || '').trim();
+      if (cid && !/^(?:bcon|conn)-/i.test(cid)) {
+        errors.push({
+          code: 'INVALID_ID_PREFIX',
+          entityId: cid,
+          message: `Board Connection ID "${cid}" must start with prefix "bcon-".`
+        });
+      }
+      if (cid) registerPackageEntityId(cid, 'board_connection');
+
+      if (!itemIds.has(conn.source_item_id) || !itemIds.has(conn.target_item_id)) {
+        errors.push({
+          code: 'MISSING_BOARD_CONNECTION_ENDPOINT',
+          entityId: cid,
+          message: `Board connection "${cid}" references missing board_item (${conn.source_item_id} -> ${conn.target_item_id}).`
+        });
+      }
+      connections.push(conn);
+    }
+
+    optionalModules.spatial_board = {
+      board: {
+        id: bid,
+        title: (b.title || 'Spatial Board').trim(),
+        description: b.description || 'Spatial workspace board',
+        groups,
+        items,
+        connections
+      }
+    };
+  }
+
+  // 11. Relationships
   const rawLinks = Array.isArray(doc.relationships) ? doc.relationships : (Array.isArray(doc.links) ? doc.links : []);
   const relationships = [];
 
-  for (const rl of rawLinks) {
+  for (let i = 0; i < rawLinks.length; i++) {
+    const rl = rawLinks[i];
     if (!rl.source_id || !rl.target_id) continue;
+
+    if (rl.id) {
+      if (!/^(?:rel|link)-/i.test(rl.id)) {
+        errors.push({
+          code: 'INVALID_ID_PREFIX',
+          entityId: rl.id,
+          message: `Relationship ID "${rl.id}" must start with prefix "rel-".`
+        });
+      }
+      registerPackageEntityId(rl.id, 'relationship');
+    }
+
+    if (!packageIdRegistry.has(rl.source_id)) {
+      errors.push({
+        code: 'MISSING_RELATIONSHIP_TARGET',
+        message: `Relationship at index ${i} source_id "${rl.source_id}" does not exist in package.`
+      });
+    }
+    if (!packageIdRegistry.has(rl.target_id)) {
+      errors.push({
+        code: 'MISSING_RELATIONSHIP_TARGET',
+        message: `Relationship at index ${i} target_id "${rl.target_id}" does not exist in package.`
+      });
+    }
+
     relationships.push({
+      id: rl.id || undefined,
       source_id: rl.source_id,
       target_id: rl.target_id,
       link_type: rl.link_type || 'relates_to',
@@ -330,39 +704,30 @@ function parseFkfDocument(rawInput) {
     });
   }
 
-  // 9. Optional modules (tasks, spatial_board)
-  const optionalModules = {
-    tasks: { tasks: [] },
-    spatial_board: null
-  };
-
-  const tasksContainer = (doc.optional_modules && doc.optional_modules.tasks) || (Array.isArray(doc.tasks) ? { tasks: doc.tasks } : null);
-  if (tasksContainer && Array.isArray(tasksContainer.tasks)) {
-    optionalModules.tasks.tasks = tasksContainer.tasks.map((t, idx) => ({
-      id: t.id || `task-${idx + 1}`,
-      title: (t.title || `Task ${idx + 1}`).trim(),
-      description: t.description || null,
-      status: t.status || 'planned',
-      priority: t.priority || 'medium',
-      due_date: t.due_date || null,
-      sort_order: typeof t.sort_order === 'number' ? t.sort_order : idx,
-      related_entity_ids: Array.isArray(t.related_entity_ids) ? t.related_entity_ids : []
-    }));
+  // 12. Validate WikiLinks in Note contents and Project overview
+  for (const n of notes) {
+    const noteWikiLinks = extractFkfWikiLinks(n.content_markdown);
+    for (const wl of noteWikiLinks) {
+      if (!wl.validSyntax || !packageIdRegistry.has(wl.targetId)) {
+        errors.push({
+          code: 'INVALID_WIKILINK_ID',
+          entityId: n.id,
+          token: wl.rawToken,
+          message: `WikiLink "${wl.rawToken}" in note "${n.id}" references unknown or invalid package ID "${wl.targetId}".`
+        });
+      }
+    }
   }
 
-  const boardContainer = (doc.optional_modules && doc.optional_modules.spatial_board) || doc.spatial_board || (doc.board ? { board: doc.board } : null);
-  if (boardContainer && boardContainer.board) {
-    const b = boardContainer.board;
-    optionalModules.spatial_board = {
-      board: {
-        id: b.id || 'board-1',
-        title: (b.title || 'Spatial Board').trim(),
-        description: b.description || 'Spatial workspace board',
-        groups: Array.isArray(b.groups) ? b.groups : [],
-        items: Array.isArray(b.items) ? b.items : [],
-        connections: Array.isArray(b.connections) ? b.connections : []
-      }
-    };
+  const overviewWikiLinks = extractFkfWikiLinks(projOverview);
+  for (const wl of overviewWikiLinks) {
+    if (!wl.validSyntax || !packageIdRegistry.has(wl.targetId)) {
+      errors.push({
+        code: 'INVALID_WIKILINK_ID',
+        token: wl.rawToken,
+        message: `WikiLink "${wl.rawToken}" in project overview references unknown or invalid package ID "${wl.targetId}".`
+      });
+    }
   }
 
   if (errors.length > 0) {
@@ -378,6 +743,7 @@ function parseFkfDocument(rawInput) {
     format: 'flowden-knowledge-format',
     fkf_version: version,
     package_id: packageId,
+    generator: doc.generator || null,
     project: {
       id: projId,
       title: projTitle,
@@ -420,12 +786,26 @@ function stageCanonicalPackage(canonical, stageDir) {
     format: 'flowden-knowledge-package',
     fkf_version: canonical.fkf_version,
     package_id: canonical.package_id,
+    generator: canonical.generator || {
+      name: 'Flowden FKF 2.0 Ingress Transformer',
+      version: '2.0.0',
+      model: 'flowden-core',
+      prompt_topic: canonical.project.title,
+      generated_at: new Date().toISOString(),
+      contains_synthetic_sources: false
+    },
     project: {
       id: canonical.project.id,
       title: canonical.project.title,
       summary: canonical.project.summary,
+      overview_file: 'project/overview.md',
       color: canonical.project.color,
       icon: canonical.project.icon
+    },
+    index_files: {
+      folders: 'folders.json',
+      sources: 'sources/index.json',
+      relationships: 'relationships/links.json'
     },
     entities: {
       notes: canonical.notes.map(n => ({
@@ -434,8 +814,23 @@ function stageCanonicalPackage(canonical, stageDir) {
         folder_id: n.folder_id,
         tags: n.tags,
         is_pinned: n.is_pinned,
-        filename: `${n.id}.md`
-      }))
+        file: `notes/${n.id}.md`
+      })),
+      assets: []
+    },
+    optional_modules: {
+      tasks: {
+        enabled: Boolean(canonical.optional_modules.tasks && canonical.optional_modules.tasks.tasks.length > 0),
+        file: 'optional/tasks.json'
+      },
+      spatial_board: {
+        enabled: Boolean(canonical.optional_modules.spatial_board && canonical.optional_modules.spatial_board.board),
+        file: 'optional/spatial-board.json'
+      },
+      research_report_pdf: {
+        enabled: false,
+        file: null
+      }
     }
   };
   fs.writeFileSync(path.join(stageDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
@@ -500,6 +895,8 @@ module.exports = {
   stripYamlFrontmatter,
   canonicalizeObject,
   computeDeterministicSha256,
+  extractFkfWikiLinks,
+  validateFolderHierarchy,
   parseFkfDocument,
   stageCanonicalPackage
 };

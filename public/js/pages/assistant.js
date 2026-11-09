@@ -76,7 +76,7 @@ async function renderAssistantPage(container) {
           </a>
           <a href="#knowledge-exchange" class="assistant-nav-tab assistant-nav-link" data-target="knowledge-exchange" id="tab-btn-exchange" role="tab" aria-selected="false" aria-controls="knowledge-exchange" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: var(--radius-sm); font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary); text-decoration: none; border: 1px solid transparent; background-color: transparent; cursor: pointer; transition: all var(--transition-fast);">
             ${getIcon('share-2')} <span>Knowledge Exchange</span>
-            <span style="font-size: 10px; font-family: var(--font-mono); padding: 1px 5px; border-radius: 3px; background-color: var(--bg-tertiary); color: var(--brand-teal); border: 1px solid rgba(120, 200, 178, 0.25);">FKF v1.0.0</span>
+            <span style="font-size: 10px; font-family: var(--font-mono); padding: 1px 5px; border-radius: 3px; background-color: var(--bg-tertiary); color: var(--brand-teal); border: 1px solid rgba(120, 200, 178, 0.25);">FKF 2.0</span>
           </a>
         </nav>
         
@@ -156,13 +156,13 @@ async function renderAssistantPage(container) {
                   </div>
                   <div>
                     <h3 style="font-size: var(--text-base); font-weight: 600; margin: 0; color: var(--text-primary);">Knowledge Exchange</h3>
-                    <span class="text-xs text-secondary">FKF v1.0.0 Standard</span>
+                    <span class="text-xs text-secondary">FKF 2.0 Standard (.fkf)</span>
                   </div>
                 </div>
-                ${statusBadge('active', 'Standard v1.0.0 Active')}
+                ${statusBadge('active', 'FKF 2.0 Active')}
               </div>
               <p class="text-xs text-secondary" style="line-height: 1.6; margin-bottom: var(--space-3);">
-                Transfer complete, interconnected research workspaces between external AI engines (Claude, ChatGPT, NotebookLM) and Flowden using the open Flowden Knowledge Package standard (<code>.flowden.zip</code>). Synthesizes multi-document research into structured, relational knowledge.
+                Transfer complete, interconnected research workspaces between external AI engines (Claude, ChatGPT, NotebookLM) and Flowden using the open Flowden Knowledge Format (<code>.fkf</code>) and package standard (<code>.flowden.zip</code>). Synthesizes multi-document research into structured, relational knowledge.
               </p>
               <ul class="assistant-capability-features" style="font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.65; padding-left: 18px; margin: 0;">
                 <li>Standardized package specification and strict JSON Schema contract</li>
@@ -615,7 +615,7 @@ async function renderAssistantPage(container) {
         <div class="assistant-card" style="padding: var(--space-4) var(--space-5); background-color: var(--bg-secondary); border: 1px solid rgba(120, 200, 178, 0.35); border-radius: var(--radius-md); margin-bottom: var(--space-5); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3);">
           <div>
             <div style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin-bottom: 2px;">
-              Flowden Knowledge Package Importer (.flowden.zip)
+              Flowden Knowledge Format Importer (.fkf, .flowden.zip)
             </div>
             <div class="text-xs text-secondary">
               Import projects, canonical notes, sources, excerpts, relationships, and optional modules.
@@ -701,26 +701,45 @@ async function renderAssistantPage(container) {
               </div>
             </div>
 
-            <!-- Resource 2: Schema -->
+            <!-- Resource 2: FKF 2.0 Schema -->
             <div class="assistant-resource-card" style="padding: var(--space-4); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); display: flex; flex-direction: column; justify-content: space-between; border-radius: var(--radius-sm);">
               <div>
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                  <span class="badge" style="font-size: 10px; font-family: var(--font-mono);">application/schema+json</span>
-                  <span class="text-xs text-secondary">~32 KB</span>
+                  <span class="badge" style="font-size: 10px; font-family: var(--font-mono); background: rgba(120, 200, 178, 0.15); color: var(--brand-teal);">FKF 2.0 JSON Schema</span>
+                  <span class="text-xs text-secondary">~15 KB</span>
                 </div>
-                <h4 style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin: 0 0 6px 0;">flowden-package.schema.json</h4>
+                <h4 style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin: 0 0 6px 0;">flowden-knowledge-format-v2.schema.json</h4>
                 <p class="text-xs text-secondary" style="line-height: 1.55; margin-bottom: var(--space-3);">
-                  Authoritative machine-readable JSON Schema (Draft 7 / 2020-12) defining strict validation rules for package manifests, folders, sources, excerpts, relationships, and tasks.
+                  Authoritative Draft 2020-12 JSON Schema for standalone single-document Flowden Knowledge Format (.fkf) files. Validates notes, folders, sources, excerpts, and graph links.
                 </p>
               </div>
               <div>
-                <a href="/api/v1/exchange/resources/package-schema" download="flowden-package.schema.json" class="btn btn--secondary btn--sm btn-download-resource" data-resource="package-schema" data-filename="flowden-package.schema.json" style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center; text-decoration: none;">
-                  ${getIcon('download')} <span>Download JSON Schema</span>
+                <a href="/api/v1/exchange/resources/schema-v2" download="flowden-knowledge-format-v2.schema.json" class="btn btn--secondary btn--sm btn-download-resource" data-resource="schema-v2" data-filename="flowden-knowledge-format-v2.schema.json" style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center; text-decoration: none;">
+                  ${getIcon('download')} <span>Download FKF 2.0 Schema</span>
                 </a>
               </div>
             </div>
 
-            <!-- Resource 3: Reference Package -->
+            <!-- Resource 3: Legacy v1 Schema -->
+            <div class="assistant-resource-card" style="padding: var(--space-4); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); display: flex; flex-direction: column; justify-content: space-between; border-radius: var(--radius-sm);">
+              <div>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                  <span class="badge" style="font-size: 10px; font-family: var(--font-mono);">FKF v1.0 Archive Schema</span>
+                  <span class="text-xs text-secondary">~32 KB</span>
+                </div>
+                <h4 style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin: 0 0 6px 0;">flowden-package.schema.json</h4>
+                <p class="text-xs text-secondary" style="line-height: 1.55; margin-bottom: var(--space-3);">
+                  Legacy JSON Schema defining validation rules for zipped package archives (.flowden.zip) with separate manifest, folders, and links files.
+                </p>
+              </div>
+              <div>
+                <a href="/api/v1/exchange/resources/package-schema" download="flowden-package.schema.json" class="btn btn--secondary btn--sm btn-download-resource" data-resource="package-schema" data-filename="flowden-package.schema.json" style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center; text-decoration: none;">
+                  ${getIcon('download')} <span>Download Legacy Schema</span>
+                </a>
+              </div>
+            </div>
+
+            <!-- Resource 4: Reference Package -->
             <div class="assistant-resource-card" style="padding: var(--space-4); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); display: flex; flex-direction: column; justify-content: space-between; border-radius: var(--radius-sm);">
               <div>
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -992,7 +1011,7 @@ async function renderAssistantPage(container) {
                 </div>
                 <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
                   <strong style="color: var(--text-primary); font-size: var(--text-xs);">Package Versions & Diagnostics:</strong>
-                  <p style="margin: 2px 0 0 0;">Flowden strictly enforces <code>fkf_version: "1.0.0"</code> and <code>format: "flowden-knowledge-package"</code>. Future minor versions of the specification will be backwards-compatible; unsupported major version strings (such as 2.x) are rejected during pre-inspection with an explicit <code>UNSUPPORTED_FKF_MAJOR_VERSION</code> error code.</p>
+                  <p style="margin: 2px 0 0 0;">Flowden officially supports standalone single-document <code>.fkf</code> files (FKF 2.0, <code>format: "flowden-knowledge-format"</code>) alongside legacy <code>.flowden.zip</code> archive packages (FKF 1.x, <code>format: "flowden-knowledge-package"</code>). Both formats are validated strictly against their formal JSON schemas and imported into unified workspace entities.</p>
                 </div>
               </div>
             </div>

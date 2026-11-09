@@ -1,0 +1,762 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowden.app/schemas/flowden-knowledge-format-v2.schema.json",
+  "title": "Flowden Knowledge Format (FKF) v2.0.0 Schema",
+  "description": "Formal JSON Schema (Draft 2020-12) for validating standalone single-file Flowden Knowledge Format (.fkf) JSON documents.",
+  "type": "object",
+  "required": [
+    "format",
+    "fkf_version",
+    "package_id",
+    "project",
+    "notes"
+  ],
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "flowden-knowledge-format",
+      "description": "Format identifier string, must be exactly 'flowden-knowledge-format'."
+    },
+    "fkf_version": {
+      "type": "string",
+      "pattern": "^2\\.[0-9]+\\.[0-9]+$",
+      "description": "SemVer version string for FKF 2.x (e.g. '2.0.0')."
+    },
+    "min_reader_version": {
+      "$ref": "#/$defs/SemVer",
+      "description": "Minimum reader version required to consume this package."
+    },
+    "package_id": {
+      "$ref": "#/$defs/PackageId"
+    },
+    "generator": {
+      "$ref": "#/$defs/GeneratorMetadata"
+    },
+    "project": {
+      "$ref": "#/$defs/ProjectObject"
+    },
+    "folders": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FolderItem"
+      },
+      "description": "Hierarchical folder definitions organizing notes in the project."
+    },
+    "notes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/NoteItem"
+      },
+      "description": "Array of notes contained in the package (at least 1 note required)."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SourceItem"
+      },
+      "description": "Bibliographic research sources with citation provenance and verbatim excerpts."
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RelationshipItem"
+      },
+      "description": "Semantic relationships connecting notes, sources, excerpts, and tasks."
+    },
+    "optional_modules": {
+      "$ref": "#/$defs/OptionalModules",
+      "description": "Optional extended workspace modules (tasks, spatial board)."
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "SemVer": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$"
+    },
+    "PackageId": {
+      "type": "string",
+      "pattern": "^(?:pkg|package)-[a-z0-9_-]{1,60}$",
+      "minLength": 4,
+      "maxLength": 64,
+      "description": "Package identifier prefixed with 'pkg-' (total 4 to 64 chars)."
+    },
+    "ProjectId": {
+      "type": "string",
+      "pattern": "^(?:proj|project)-[a-z0-9_-]{1,60}$",
+      "minLength": 4,
+      "maxLength": 64,
+      "description": "Project identifier prefixed with 'proj-' (total 4 to 64 chars)."
+    },
+    "FolderId": {
+      "type": "string",
+      "pattern": "^(?:fld|folder)-[a-z0-9_-]{1,60}$",
+      "minLength": 4,
+      "maxLength": 64,
+      "description": "Folder identifier prefixed with 'fld-' (total 4 to 64 chars)."
+    },
+    "NoteId": {
+      "type": "string",
+      "pattern": "^(?:note|n)-[a-z0-9_-]{1,60}$",
+      "minLength": 4,
+      "maxLength": 64,
+      "description": "Note identifier prefixed with 'note-' or 'n-' (total 4 to 64 chars)."
+    },
+    "SourceId": {
+      "type": "string",
+      "pattern": "^(?:src|source)-[a-z0-9_-]{1,60}$",
+      "minLength": 4,
+      "maxLength": 64,
+      "description": "Source identifier prefixed with 'src-' (total 4 to 64 chars)."
+    },
+    "ExcerptId": {
+      "type": "string",
+      "pattern": "^(?:exc|excerpt)-[a-z0-9_-]{1,60}$",
+      "minLength": 4,
+      "maxLength": 64,
+      "description": "Excerpt identifier prefixed with 'exc-' (total 4 to 64 chars)."
+    },
+    "RelationshipId": {
+      "type": "string",
+      "pattern": "^(?:rel|link)-[a-z0-9_-]{1,60}$",
+      "minLength": 4,
+      "maxLength": 64,
+      "description": "Relationship identifier prefixed with 'rel-' (total 4 to 64 chars)."
+    },
+    "TaskId": {
+      "type": "string",
+      "pattern": "^(?:tsk|task)-[a-z0-9_-]{1,60}$",
+      "minLength": 4,
+      "maxLength": 64,
+      "description": "Task identifier prefixed with 'tsk-' or 'task-' (total 4 to 64 chars)."
+    },
+    "BoardId": {
+      "type": "string",
+      "pattern": "^(?:brd|board)-[a-z0-9_-]{1,60}$",
+      "minLength": 4,
+      "maxLength": 64,
+      "description": "Spatial Board identifier prefixed with 'brd-' or 'board-' (total 4 to 64 chars)."
+    },
+    "BoardGroupId": {
+      "type": "string",
+      "pattern": "^(?:grp|group)-[a-z0-9_-]{1,60}$",
+      "minLength": 4,
+      "maxLength": 64,
+      "description": "Board group identifier prefixed with 'grp-' (total 4 to 64 chars)."
+    },
+    "BoardItemId": {
+      "type": "string",
+      "pattern": "^(?:bitm|itm|item)-[a-z0-9_-]{1,60}$",
+      "minLength": 4,
+      "maxLength": 64,
+      "description": "Board item identifier prefixed with 'bitm-' or 'itm-' (total 4 to 64 chars)."
+    },
+    "BoardConnectionId": {
+      "type": "string",
+      "pattern": "^(?:bcon|conn)-[a-z0-9_-]{1,60}$",
+      "minLength": 4,
+      "maxLength": 64,
+      "description": "Board connection identifier prefixed with 'bcon-' (total 4 to 64 chars)."
+    },
+    "GeneratorMetadata": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "prompt_topic": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "generated_at": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "contains_synthetic_sources": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProjectObject": {
+      "type": "object",
+      "required": [
+        "id",
+        "title"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ProjectId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "overview": {
+          "type": "string"
+        },
+        "overview_markdown": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#(?:[0-9a-fA-F]{3}){1,2}$"
+        },
+        "icon": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "FolderItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/FolderId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^fld-[a-z0-9_-]{1,60}$"
+        },
+        "sort_order": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "NoteItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "title"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/NoteId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "folder_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^fld-[a-z0-9_-]{1,60}$"
+        },
+        "content": {
+          "type": "string"
+        },
+        "content_markdown": {
+          "type": "string"
+        },
+        "is_pinned": {
+          "type": "boolean"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "SourceItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "title"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/SourceId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "journal_article",
+            "preprint",
+            "book",
+            "book_chapter",
+            "conference_proceeding",
+            "whitepaper",
+            "technical_report",
+            "documentation",
+            "web_article",
+            "code_repository",
+            "dataset",
+            "legal_regulatory",
+            "interview",
+            "podcast_transcript",
+            "unspecified"
+          ]
+        },
+        "verification_status": {
+          "type": "string",
+          "enum": [
+            "verified",
+            "partially_verified",
+            "unverified_external",
+            "synthetic_demonstration",
+            "unverified"
+          ]
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "publication_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "content_text": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "is_synthetic_example": {
+          "type": "boolean"
+        },
+        "excerpts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExcerptItem"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExcerptItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "quoted_text"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ExcerptId"
+        },
+        "quoted_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "annotation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "location_anchor": {
+          "type": "string"
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "RelationshipItem": {
+      "type": "object",
+      "required": [
+        "source_id",
+        "target_id",
+        "link_type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RelationshipId"
+        },
+        "source_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{2,63}$"
+        },
+        "target_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{2,63}$"
+        },
+        "link_type": {
+          "type": "string",
+          "enum": [
+            "references",
+            "embeds",
+            "cites",
+            "derived_from",
+            "supports",
+            "contradicts",
+            "inspired_by",
+            "depends_on",
+            "blocks",
+            "relates_to"
+          ]
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "ai_suggested",
+            "citation",
+            "rule_engine",
+            "system_event",
+            "template_seed",
+            "graph_inference",
+            "task_sync"
+          ]
+        },
+        "is_confirmed": {
+          "type": "boolean"
+        },
+        "context_snippet": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1000
+        }
+      },
+      "additionalProperties": false
+    },
+    "OptionalModules": {
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "$ref": "#/$defs/TasksContainer"
+        },
+        "spatial_board": {
+          "$ref": "#/$defs/SpatialBoardContainer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TasksContainer": {
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TaskItem"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "TaskItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "title"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/TaskId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "planned",
+            "in_progress",
+            "done",
+            "cancelled"
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "urgent"
+          ]
+        },
+        "due_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sort_order": {
+          "type": "integer"
+        },
+        "related_entity_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "SpatialBoardContainer": {
+      "type": "object",
+      "required": [
+        "board"
+      ],
+      "properties": {
+        "board": {
+          "$ref": "#/$defs/BoardItem"
+        }
+      },
+      "additionalProperties": false
+    },
+    "BoardItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "title"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/BoardId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BoardGroupItem"
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BoardElementItem"
+          }
+        },
+        "connections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BoardConnectionItem"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "BoardGroupItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "title"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/BoardGroupId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "color": {
+          "type": "string"
+        },
+        "position_x": {
+          "type": "number"
+        },
+        "position_y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "BoardElementItem": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/BoardItemId"
+        },
+        "item_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "note",
+            "research",
+            "task",
+            "text_card",
+            null
+          ]
+        },
+        "reference_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reference_package_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "position_x": {
+          "type": "number"
+        },
+        "position_y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "color": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "BoardConnectionItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "source_item_id",
+        "target_item_id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/BoardConnectionId"
+        },
+        "source_item_id": {
+          "$ref": "#/$defs/BoardItemId"
+        },
+        "target_item_id": {
+          "$ref": "#/$defs/BoardItemId"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "connection_type": {
+          "type": "string"
+        },
+        "style": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -2,8 +2,10 @@ const fs = require('fs');
 const path = require('path');
 
 const SCHEMA_PATH = path.resolve(__dirname, '..', '..', 'docs', 'knowledge-exchange', 'flowden-package.schema.json');
+const SCHEMA_V2_PATH = path.resolve(__dirname, '..', '..', 'docs', 'knowledge-exchange', 'flowden-knowledge-format-v2.schema.json');
 
 let cachedSchema = null;
+let cachedV2Schema = null;
 
 function getFkfRootSchema() {
   if (!cachedSchema) {
@@ -13,7 +15,18 @@ function getFkfRootSchema() {
   return cachedSchema;
 }
 
+function getFkfV2RootSchema() {
+  if (!cachedV2Schema) {
+    const raw = fs.readFileSync(SCHEMA_V2_PATH, 'utf8');
+    cachedV2Schema = JSON.parse(raw);
+  }
+  return cachedV2Schema;
+}
+
 function resolveRef(ref, rootSchema) {
+  if (ref === '#') {
+    return rootSchema;
+  }
   if (typeof ref !== 'string' || !ref.startsWith('#/')) {
     throw new Error(`Unsupported JSON Schema $ref: ${ref}`);
   }
@@ -29,14 +42,14 @@ function resolveRef(ref, rootSchema) {
 }
 
 /**
- * Recursive JSON Schema (Draft 2020-12 subset used by flowden-package.schema.json) validator.
+ * Recursive JSON Schema (Draft 2020-12 subset) validator.
  */
 function validateAgainstSchemaNode(instance, schemaNode, rootSchema, fileLabel, pointer = '#') {
   const errors = [];
 
   if (schemaNode.$ref) {
     const targetNode = resolveRef(schemaNode.$ref, rootSchema);
-    errors.push(...validateAgainstSchemaNode(instance, targetNode, rootSchema, fileLabel, pointer));
+    return validateAgainstSchemaNode(instance, targetNode, rootSchema, fileLabel, pointer);
   }
 
   if (schemaNode.oneOf) {
@@ -225,8 +238,14 @@ function validateFkfDocument(data, defName, fileLabel) {
   return validateAgainstSchemaNode(data, targetSchema, rootSchema, fileLabel, '#');
 }
 
+function validateFkfV2Document(data, fileLabel = 'package.fkf') {
+  const rootSchema = getFkfV2RootSchema();
+  return validateAgainstSchemaNode(data, rootSchema, rootSchema, fileLabel, '#');
+}
+
 module.exports = {
   getFkfRootSchema,
-  validateFkfDocument
+  getFkfV2RootSchema,
+  validateFkfDocument,
+  validateFkfV2Document
 };
-

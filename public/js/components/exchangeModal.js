@@ -133,7 +133,7 @@
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="color: var(--brand-teal); display: inline-flex;">${getIcon('share-2')}</span>
           <span>Flowden Knowledge Package Importer</span>
-          <span class="badge" style="font-size: 10px; font-family: var(--font-mono); background: rgba(120, 200, 178, 0.12); color: var(--brand-teal); border: 1px solid rgba(120, 200, 178, 0.3);">FKF v1.0.0</span>
+          <span class="badge" style="font-size: 10px; font-family: var(--font-mono); background: rgba(120, 200, 178, 0.12); color: var(--brand-teal); border: 1px solid rgba(120, 200, 178, 0.3);">FKF 2.0 / 1.0</span>
         </div>
       `;
     }
@@ -380,7 +380,7 @@
             <span>Inspection Failed: ${escapeHtml(privateSession.errorMessage || 'Archive validation error')}</span>
           </div>
           <p class="text-secondary" style="font-size: var(--text-xs); margin: 0 0 var(--space-3) 0;">
-            The uploaded package did not satisfy the FKF v1.0.0 validation contract. Please resolve the issues below and try again:
+            The uploaded package did not satisfy the Flowden Knowledge Format validation contract. Please resolve the issues below and try again:
           </p>
           <div style="display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto;">
             ${(privateSession.errorDetails || []).map(err => `
@@ -432,7 +432,7 @@
               <div style="display: flex; align-items: center; gap: 8px;">
                 <h3 style="font-size: var(--text-base); font-weight: 600; color: var(--text-primary); margin: 0;">${escapeHtml(proj.title || 'Research Project')}</h3>
                 <span class="badge" style="font-size: 10px; background: rgba(16, 185, 129, 0.12); color: var(--status-success); border: 1px solid rgba(16, 185, 129, 0.3);">
-                  ${getIcon('check')} Valid FKF v1.0.0
+                  ${getIcon('check')} Valid ${escapeHtml(pkg.fkf_version ? 'FKF v' + pkg.fkf_version : (data.fkf_version ? 'FKF v' + data.fkf_version : 'FKF 2.0'))}
                 </span>
               </div>
               <div class="text-secondary" style="font-size: 11px; margin-top: 2px;">
@@ -513,7 +513,7 @@
             <span class="badge" style="font-size: 9px; background: rgba(120, 200, 178, 0.12); color: var(--brand-teal); border: 1px solid rgba(120, 200, 178, 0.3);">Atomic Synthesis</span>
           </div>
           <div style="color: var(--text-secondary); line-height: 1.55;">
-            Flowden FKF v1.0.0 imports declared modules directly into real workspace systems. When present, <strong>Tasks</strong> (${counts.tasks || 0}) map to the project Kanban and <strong>Spatial Board</strong> (${counts.board_items || 0} items) projects onto the 2D canvas. Declared modules are committed together in the atomic transaction without selective omission.<br/>
+            Flowden imports declared modules directly into real workspace systems. When present, <strong>Tasks</strong> (${counts.tasks || 0}) map to the project Kanban and <strong>Spatial Board</strong> (${counts.board_items || 0} items) projects onto the 2D canvas. Declared modules are committed together in the atomic transaction without selective omission.<br/>
             ${(data.optional_modules && data.optional_modules.research_report_pdf) ? '<span style="color: var(--brand-teal);"><strong>Companion Report:</strong> <code>exports/research-report.pdf</code> included and staged for document access.</span>' : '<span style="color: var(--text-tertiary);"><strong>Companion Report:</strong> No companion PDF export included in this package.</span>'}
           </div>
         </div>

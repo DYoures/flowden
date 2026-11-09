@@ -263,11 +263,10 @@ class KnowledgeExchangeService {
           'contradicts', 'inspired_by', 'depends_on', 'blocks', 'relates_to'
         ];
         const finalLinkType = validLinkTypes.includes(link.link_type) ? link.link_type : 'relates_to';
-        const validOrigins = [
-          'manual', 'ai_suggested', 'citation', 'rule_engine', 'system_event', 'template_seed', 'graph_inference', 'task_sync'
-        ];
-        const origin = link.origin && validOrigins.includes(link.origin) ? link.origin : (link.link_type === 'cites' ? 'citation' : 'ai_suggested');
-        const isConfirmed = origin === 'ai_suggested' ? 0 : (link.is_confirmed !== undefined ? (link.is_confirmed ? 1 : 0) : 1);
+        // TRUST BOUNDARY: All imported relationships from packages are unconfirmed by default.
+        // External packages cannot self-certify relationships (is_confirmed = 0, origin = 'ai_suggested').
+        const origin = 'ai_suggested';
+        const isConfirmed = 0;
         const contextSnippet = link.context_snippet ? String(link.context_snippet).slice(0, 500) : null;
 
         await dbOrConn.query(
