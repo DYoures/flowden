@@ -150,13 +150,23 @@ router.post('/:id/members', async (req, res, next) => {
     }
     const { user_id, role = 'editor' } = req.body || {};
     if (!user_id) return res.status(400).json({ error: 'user_id is required' });
-    const safeRole = ['viewer', 'editor', 'admin'].includes(role) ? role : 'viewer';
+
+    const ALLOWED_MEMBER_ROLES = ['editor', 'viewer'];
+    const normalizedRole = typeof role === 'string' ? role.toLowerCase().trim() : '';
+
+    if (!ALLOWED_MEMBER_ROLES.includes(normalizedRole)) {
+      return res.status(400).json({
+        error: 'Invalid member role. Only "editor" and "viewer" can be granted as regular member roles.',
+        code: 'INVALID_MEMBER_ROLE',
+        allowed_roles: ALLOWED_MEMBER_ROLES
+      });
+    }
 
     await db.query(
       `INSERT INTO project_members (project_id, user_id, role, revoked_at)
        VALUES (?, ?, ?, NULL)
        ON DUPLICATE KEY UPDATE role = VALUES(role), revoked_at = NULL`,
-      [req.params.id, Number(user_id), safeRole]
+      [req.params.id, Number(user_id), normalizedRole]
     );
 
     await SecurityService.logSecurityEvent({
@@ -166,10 +176,10 @@ router.post('/:id/members', async (req, res, next) => {
       ip: req.ip,
       targetType: 'project',
       targetId: String(req.params.id),
-      details: { memberUserId: Number(user_id), role: safeRole }
+      details: { memberUserId: Number(user_id), role: normalizedRole }
     });
 
-    res.status(201).json({ success: true, project_id: Number(req.params.id), user_id: Number(user_id), role: safeRole });
+    res.status(201).json({ success: true, project_id: Number(req.params.id), user_id: Number(user_id), role: normalizedRole });
   } catch (err) {
     next(err);
   }
