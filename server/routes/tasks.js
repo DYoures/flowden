@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../config/database');
+const Project = require('../models/Project');
 const authenticateToken = require('../middleware/auth');
 const EntitySyncService = require('../services/entitySyncService');
 
@@ -51,9 +52,18 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({ error: 'Task title is required' });
     }
 
+    let resolvedProjectId = null;
+    if (project_id !== null && project_id !== undefined && project_id !== '') {
+      const auth = await Project.validateWriteAccess(project_id, req.user.id);
+      if (!auth.valid) {
+        return res.status(auth.status).json({ error: auth.error });
+      }
+      resolvedProjectId = auth.projectId;
+    }
+
     const result = await db.query(
       'INSERT INTO tasks (user_id, project_id, title, description, status, priority, due_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [req.user.id, project_id || null, title.trim(), description || '', status, priority, due_date || null]
+      [req.user.id, resolvedProjectId, title.trim(), description || '', status, priority, due_date || null]
     );
 
     await EntitySyncService.syncTaskEntity(db, result.insertId, req.user.id);
@@ -85,7 +95,18 @@ router.put('/:id', async (req, res, next) => {
     }
     if (priority !== undefined) { updates.push('priority = ?'); params.push(priority); }
     if (due_date !== undefined) { updates.push('due_date = ?'); params.push(due_date); }
-    if (project_id !== undefined) { updates.push('project_id = ?'); params.push(project_id); }
+    if (project_id !== undefined) {
+      let resolvedProjectId = null;
+      if (project_id !== null && project_id !== '') {
+        const auth = await Project.validateWriteAccess(project_id, req.user.id);
+        if (!auth.valid) {
+          return res.status(auth.status).json({ error: auth.error });
+        }
+        resolvedProjectId = auth.projectId;
+      }
+      updates.push('project_id = ?');
+      params.push(resolvedProjectId);
+    }
     if (sort_order !== undefined) { updates.push('sort_order = ?'); params.push(sort_order); }
 
     if (updates.length > 0) {

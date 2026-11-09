@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const Project = require('./Project');
 const EntitySyncService = require('../services/entitySyncService');
 
 class Note {
@@ -162,6 +163,17 @@ class Note {
     }
 
     const { title = 'Untitled Note', content = '', content_markdown, project_id = null, folder_id = null, is_pinned = false, tags = [], attachments_json = null } = data || {};
+    let resolvedProjectId = null;
+    if (project_id !== null && project_id !== undefined && project_id !== '') {
+      const projAuth = await Project.validateWriteAccess(project_id, userId, db);
+      if (!projAuth.valid) {
+        const err = new Error(projAuth.error);
+        err.status = projAuth.status;
+        throw err;
+      }
+      resolvedProjectId = projAuth.projectId;
+    }
+
     const effectiveContent = (content !== undefined && content !== null && content !== '') ? content : (content_markdown || '');
     const wordCount = countWords(effectiveContent);
 
@@ -169,7 +181,7 @@ class Note {
       'INSERT INTO notes (user_id, project_id, folder_id, title, content, is_pinned, word_count, attachments_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [
         userId,
-        project_id || null,
+        resolvedProjectId,
         folder_id || null,
         (title || '').trim() || 'Untitled Note',
         effectiveContent,
@@ -233,8 +245,18 @@ class Note {
       params.push(countWords(effectiveContent));
     }
     if (project_id !== undefined) {
+      let resolvedProjectId = null;
+      if (project_id !== null && project_id !== '') {
+        const projAuth = await Project.validateWriteAccess(project_id, userId, db);
+        if (!projAuth.valid) {
+          const err = new Error(projAuth.error);
+          err.status = projAuth.status;
+          throw err;
+        }
+        resolvedProjectId = projAuth.projectId;
+      }
       updates.push('project_id = ?');
-      params.push(project_id ? parseInt(project_id, 10) : null);
+      params.push(resolvedProjectId);
     }
     if (folder_id !== undefined) {
       updates.push('folder_id = ?');

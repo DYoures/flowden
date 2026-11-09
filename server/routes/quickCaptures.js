@@ -1,7 +1,9 @@
 const express = require('express');
 const db = require('../config/database');
 const Note = require('../models/Note');
+const Project = require('../models/Project');
 const authenticateToken = require('../middleware/auth');
+const EntitySyncService = require('../services/entitySyncService');
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -27,9 +29,18 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({ error: 'Content is required' });
     }
 
+    let resolvedProjectId = null;
+    if (project_id !== null && project_id !== undefined && project_id !== '') {
+      const auth = await Project.validateWriteAccess(project_id, req.user.id);
+      if (!auth.valid) {
+        return res.status(auth.status).json({ error: auth.error });
+      }
+      resolvedProjectId = auth.projectId;
+    }
+
     const result = await db.query(
       'INSERT INTO quick_captures (user_id, content, capture_type, project_id, is_processed) VALUES (?, ?, ?, ?, 0)',
-      [req.user.id, content.trim(), capture_type, project_id]
+      [req.user.id, content.trim(), capture_type, resolvedProjectId]
     );
 
     const rows = await db.query('SELECT * FROM quick_captures WHERE id = ? LIMIT 1', [result.insertId]);
@@ -47,19 +58,31 @@ router.post('/:id/process', async (req, res, next) => {
     if (!captures || captures.length === 0) return res.status(404).json({ error: 'Capture not found' });
 
     const capture = captures[0];
+    const targetProjectId = project_id !== undefined ? project_id : capture.project_id;
+    let resolvedTargetProjectId = null;
+    if (targetProjectId !== null && targetProjectId !== undefined && targetProjectId !== '') {
+      const auth = await Project.validateWriteAccess(targetProjectId, req.user.id);
+      if (!auth.valid) {
+        return res.status(auth.status).json({ error: auth.error });
+      }
+      resolvedTargetProjectId = auth.projectId;
+    }
+
     let createdEntity = null;
 
     if (target_type === 'note') {
       createdEntity = await Note.create(req.user.id, {
         title: title || `Note from capture (${new Date().toLocaleDateString()})`,
         content: capture.content,
-        project_id: project_id || capture.project_id
+        project_id: resolvedTargetProjectId
       });
+      await EntitySyncService.syncNoteEntity(db, createdEntity.id, req.user.id);
     } else if (target_type === 'task') {
       const ins = await db.query(
         'INSERT INTO tasks (user_id, project_id, title, description, status, priority) VALUES (?, ?, ?, ?, ?, ?)',
-        [req.user.id, project_id || capture.project_id, title || capture.content.substring(0, 80), capture.content, 'planned', 'medium']
+        [req.user.id, resolvedTargetProjectId, title || capture.content.substring(0, 80), capture.content, 'planned', 'medium']
       );
+      await EntitySyncService.syncTaskEntity(db, ins.insertId, req.user.id);
       const rows = await db.query('SELECT * FROM tasks WHERE id = ? LIMIT 1', [ins.insertId]);
       createdEntity = rows[0];
     }

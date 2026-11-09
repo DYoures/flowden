@@ -4,6 +4,7 @@ const fs = require('fs');
 const multer = require('multer');
 const db = require('../config/database');
 const Note = require('../models/Note');
+const Project = require('../models/Project');
 const authenticateToken = require('../middleware/auth');
 const EntitySyncService = require('../services/entitySyncService');
 const SecurityService = require('../services/securityService');
@@ -87,7 +88,9 @@ const uploadSingleVaultAttachment = (req, res, next) => {
 const handleVaultUpload = async (req, res, next) => {
   try {
     const noteId = req.params.id ? parseInt(req.params.id, 10) : (req.body.note_id ? parseInt(req.body.note_id, 10) : null);
-    let noteProjectId = req.body.project_id ? parseInt(req.body.project_id, 10) : null;
+    let noteProjectId = req.body.project_id !== undefined && req.body.project_id !== null && req.body.project_id !== ''
+      ? req.body.project_id
+      : null;
 
     if (noteId) {
       const note = await Note.findById(noteId, req.user.id);
@@ -96,6 +99,15 @@ const handleVaultUpload = async (req, res, next) => {
         return res.status(404).json({ error: 'Note not found or unauthorized' });
       }
       noteProjectId = note.project_id || noteProjectId;
+    }
+
+    if (noteProjectId !== null && noteProjectId !== undefined && noteProjectId !== '') {
+      const projectAuth = await Project.validateWriteAccess(noteProjectId, req.user.id);
+      if (!projectAuth.valid) {
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(projectAuth.status).json({ error: projectAuth.error });
+      }
+      noteProjectId = projectAuth.projectId;
     }
 
     // Perform magic-byte and active-content signature verification
@@ -519,10 +531,20 @@ router.get('/', async (req, res, next) => {
 // POST /api/v1/notes
 router.post('/', async (req, res, next) => {
   try {
+    const { project_id } = req.body || {};
+    if (project_id !== null && project_id !== undefined && project_id !== '') {
+      const auth = await Project.validateWriteAccess(project_id, req.user.id);
+      if (!auth.valid) {
+        return res.status(auth.status).json({ error: auth.error });
+      }
+    }
     const note = await Note.create(req.user.id, req.body);
     await EntitySyncService.syncNoteEntity(db, note.id, req.user.id);
     res.status(201).json({ note });
   } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
     next(err);
   }
 });
@@ -533,6 +555,13 @@ router.post('/import', async (req, res, next) => {
     const { title, content, project_id, folder_id, tags } = req.body;
     if (!content && !title) {
       return res.status(400).json({ error: 'Import requires content or title' });
+    }
+
+    if (project_id !== null && project_id !== undefined && project_id !== '') {
+      const auth = await Project.validateWriteAccess(project_id, req.user.id);
+      if (!auth.valid) {
+        return res.status(auth.status).json({ error: auth.error });
+      }
     }
 
     let parsedTitle = title;
@@ -552,6 +581,9 @@ router.post('/import', async (req, res, next) => {
 
     res.status(201).json({ message: 'Note imported successfully', note });
   } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
     next(err);
   }
 });
@@ -586,6 +618,13 @@ router.get('/:id', async (req, res, next) => {
 // PUT /api/v1/notes/:id
 router.put('/:id', async (req, res, next) => {
   try {
+    const { project_id } = req.body || {};
+    if (project_id !== undefined && project_id !== null && project_id !== '') {
+      const auth = await Project.validateWriteAccess(project_id, req.user.id);
+      if (!auth.valid) {
+        return res.status(auth.status).json({ error: auth.error });
+      }
+    }
     const note = await Note.update(req.params.id, req.user.id, req.body);
     if (!note) {
       return res.status(404).json({ error: 'Note not found or unauthorized' });
@@ -593,6 +632,9 @@ router.put('/:id', async (req, res, next) => {
     await EntitySyncService.syncNoteEntity(db, note.id, req.user.id);
     res.json({ note });
   } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
     next(err);
   }
 });

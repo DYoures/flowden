@@ -45,36 +45,66 @@ class Project {
 
   static async hasWriteAccess(id, userId, dbOrConn = db) {
     if (!id || !userId) return false;
+    const parsedId = parseInt(id, 10);
+    const numericUserId = parseInt(userId, 10);
+    if (isNaN(parsedId) || isNaN(numericUserId)) return false;
+
     const rows = await dbOrConn.query(
       `SELECT p.id, p.user_id as owner_id, pm.role as member_role
        FROM projects p
        LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ? AND pm.revoked_at IS NULL
        WHERE p.id = ?
        LIMIT 1`,
-      [userId, id]
+      [numericUserId, parsedId]
     );
     if (!rows || rows.length === 0) return false;
     const proj = rows[0];
-    if (proj.owner_id === userId) return true;
+    if (Number(proj.owner_id) === numericUserId) return true;
     if (proj.member_role === 'owner' || proj.member_role === 'editor') return true;
     return false;
   }
 
   static async getMemberRole(id, userId, dbOrConn = db) {
     if (!id || !userId) return null;
+    const parsedId = parseInt(id, 10);
+    const numericUserId = parseInt(userId, 10);
+    if (isNaN(parsedId) || isNaN(numericUserId)) return null;
+
     const rows = await dbOrConn.query(
       `SELECT p.id, p.user_id as owner_id, pm.role as member_role
        FROM projects p
        LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ? AND pm.revoked_at IS NULL
        WHERE p.id = ?
        LIMIT 1`,
-      [userId, id]
+      [numericUserId, parsedId]
     );
     if (!rows || rows.length === 0) return null;
     const proj = rows[0];
-    if (proj.owner_id === userId) return 'owner';
+    if (Number(proj.owner_id) === numericUserId) return 'owner';
     if (proj.member_role) return proj.member_role;
     return null;
+  }
+
+  static async validateWriteAccess(id, userId, dbOrConn = db) {
+    if (id === null || id === undefined || id === '') {
+      return { valid: true, projectId: null };
+    }
+    const parsedId = parseInt(id, 10);
+    if (isNaN(parsedId) || parsedId <= 0 || String(parsedId) !== String(id).trim()) {
+      return { valid: false, status: 400, error: 'Invalid project ID. Must be a positive integer.' };
+    }
+
+    const hasAccess = await this.hasWriteAccess(parsedId, userId, dbOrConn);
+    if (hasAccess) {
+      return { valid: true, projectId: parsedId };
+    }
+
+    const projRows = await dbOrConn.query('SELECT id FROM projects WHERE id = ? LIMIT 1', [parsedId]);
+    const exists = Array.isArray(projRows) && projRows.length > 0;
+    if (!exists) {
+      return { valid: false, status: 404, error: 'Project not found' };
+    }
+    return { valid: false, status: 403, error: 'Forbidden: You do not have write access to this project.' };
   }
 
   static async create(userIdOrObj, maybeData = {}) {

@@ -3,7 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const db = require('../config/database');
+const Project = require('../models/Project');
 const authenticateToken = require('../middleware/auth');
+const EntitySyncService = require('../services/entitySyncService');
 const SecurityService = require('../services/securityService');
 
 const router = express.Router();
@@ -169,6 +171,17 @@ const handleResearchUpload = [
       }
 
       const { project_id, source_url } = req.body || {};
+      let resolvedProjectId = null;
+      if (project_id !== null && project_id !== undefined && project_id !== '') {
+        const auth = await Project.validateWriteAccess(project_id, req.user.id);
+        if (!auth.valid) {
+          for (const file of files) {
+            try { fs.unlinkSync(file.path); } catch (_) {}
+          }
+          return res.status(auth.status).json({ error: auth.error });
+        }
+        resolvedProjectId = auth.projectId;
+      }
       const importedDocs = [];
 
       for (const file of files) {
@@ -205,7 +218,7 @@ const handleResearchUpload = [
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             req.user.id,
-            project_id ? parseInt(project_id, 10) : null,
+            resolvedProjectId,
             initialTitle,
             file.originalname || file.filename,
             file.filename,
@@ -222,7 +235,7 @@ const handleResearchUpload = [
         const relativeUrl = `/uploads/research/${file.filename}`;
         await SecurityService.registerUploadedFile({
           userId: req.user.id,
-          projectId: project_id ? parseInt(project_id, 10) : null,
+          projectId: resolvedProjectId,
           entityType: 'research',
           entityId: result.insertId,
           filename: file.filename,
@@ -231,6 +244,8 @@ const handleResearchUpload = [
           mimeType: validation.detectedMime || file.mimetype,
           fileSize: file.size
         });
+
+        await EntitySyncService.syncResearchEntity(db, result.insertId, req.user.id);
 
         const rows = await db.query('SELECT * FROM research_documents WHERE id = ? LIMIT 1', [result.insertId]);
         if (rows && rows.length > 0) {
@@ -270,13 +285,25 @@ router.put('/:id', async (req, res, next) => {
     if (title !== undefined) { updates.push('title = ?'); params.push(title.trim()); }
     if (summary !== undefined) { updates.push('summary = ?'); params.push(summary); }
     if (source_url !== undefined) { updates.push('source_url = ?'); params.push(source_url); }
-    if (project_id !== undefined) { updates.push('project_id = ?'); params.push(project_id ? parseInt(project_id, 10) : null); }
+    if (project_id !== undefined) {
+      let resolvedProjectId = null;
+      if (project_id !== null && project_id !== '') {
+        const auth = await Project.validateWriteAccess(project_id, req.user.id);
+        if (!auth.valid) {
+          return res.status(auth.status).json({ error: auth.error });
+        }
+        resolvedProjectId = auth.projectId;
+      }
+      updates.push('project_id = ?');
+      params.push(resolvedProjectId);
+    }
     if (tags_json !== undefined) { updates.push('tags_json = ?'); params.push(typeof tags_json === 'string' ? tags_json : JSON.stringify(tags_json)); }
 
     if (updates.length > 0) {
       params.push(req.user.id);
       params.push(req.params.id);
       await db.query(`UPDATE research_documents SET ${updates.join(', ')} WHERE user_id = ? AND id = ?`, params);
+      await EntitySyncService.syncResearchEntity(db, req.params.id, req.user.id);
     }
 
     const rows = await db.query('SELECT * FROM research_documents WHERE id = ? LIMIT 1', [req.params.id]);

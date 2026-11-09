@@ -44,12 +44,25 @@ class EntitySyncService {
     const searchText = stripMarkdown(note.content || '');
     const projectId = note.project_id ? parseInt(note.project_id, 10) : null;
 
-    // Check if canonical entity exists
+    // Check if canonical entity exists and retrieve previous primary_project_id
     const rawExisting = await dbOrConn.query(
-      'SELECT id FROM entities WHERE entity_type = "note" AND entity_id = ? LIMIT 1',
+      'SELECT id, primary_project_id FROM entities WHERE entity_type = "note" AND entity_id = ? LIMIT 1',
       [noteId]
     );
     const existingRows = extractRows(rawExisting);
+    const prevPrimaryProjectId = existingRows && existingRows.length > 0 && existingRows[0].primary_project_id
+      ? parseInt(existingRows[0].primary_project_id, 10)
+      : null;
+
+    // Primary Project Reassignment:
+    // If the primary project changed (or was cleared to null), remove the association belonging
+    // to the previous primary Project. Unrelated explicit secondary associations are strictly preserved.
+    if (prevPrimaryProjectId && prevPrimaryProjectId !== projectId) {
+      await dbOrConn.query(
+        'DELETE FROM project_entities WHERE entity_type = "note" AND entity_id = ? AND project_id = ?',
+        [noteId, prevPrimaryProjectId]
+      );
+    }
 
     if (existingRows && existingRows.length > 0) {
       await dbOrConn.query(
@@ -64,7 +77,7 @@ class EntitySyncService {
       );
     }
 
-    // Invariant: every entity with primary_project_id also exists in project_entities
+    // Ensure the primary association exists in project_entities if assigned to a Project
     if (projectId) {
       await dbOrConn.query(
         `INSERT INTO project_entities (project_id, entity_type, entity_id, access_role, added_by, created_at)
@@ -91,11 +104,24 @@ class EntitySyncService {
     const searchText = (task.description || '').trim();
     const projectId = task.project_id ? parseInt(task.project_id, 10) : null;
 
+    // Check if canonical entity exists and retrieve previous primary_project_id
     const rawExisting = await dbOrConn.query(
-      'SELECT id FROM entities WHERE entity_type = "task" AND entity_id = ? LIMIT 1',
+      'SELECT id, primary_project_id FROM entities WHERE entity_type = "task" AND entity_id = ? LIMIT 1',
       [taskId]
     );
     const existingRows = extractRows(rawExisting);
+    const prevPrimaryProjectId = existingRows && existingRows.length > 0 && existingRows[0].primary_project_id
+      ? parseInt(existingRows[0].primary_project_id, 10)
+      : null;
+
+    // Primary Project Reassignment:
+    // If the primary project changed, remove ONLY the previous primary project association.
+    if (prevPrimaryProjectId && prevPrimaryProjectId !== projectId) {
+      await dbOrConn.query(
+        'DELETE FROM project_entities WHERE entity_type = "task" AND entity_id = ? AND project_id = ?',
+        [taskId, prevPrimaryProjectId]
+      );
+    }
 
     if (existingRows && existingRows.length > 0) {
       await dbOrConn.query(
@@ -218,10 +244,20 @@ class EntitySyncService {
     const projectId = doc.project_id ? parseInt(doc.project_id, 10) : null;
 
     const rawExisting = await dbOrConn.query(
-      'SELECT id FROM entities WHERE entity_type = "research" AND entity_id = ? LIMIT 1',
+      'SELECT id, primary_project_id FROM entities WHERE entity_type = "research" AND entity_id = ? LIMIT 1',
       [researchId]
     );
     const existingRows = extractRows(rawExisting);
+    const prevPrimaryProjectId = existingRows && existingRows.length > 0 && existingRows[0].primary_project_id
+      ? parseInt(existingRows[0].primary_project_id, 10)
+      : null;
+
+    if (prevPrimaryProjectId && prevPrimaryProjectId !== projectId) {
+      await dbOrConn.query(
+        'DELETE FROM project_entities WHERE entity_type = "research" AND entity_id = ? AND project_id = ?',
+        [researchId, prevPrimaryProjectId]
+      );
+    }
 
     if (existingRows && existingRows.length > 0) {
       await dbOrConn.query(
@@ -244,6 +280,46 @@ class EntitySyncService {
         [projectId, researchId, userId || doc.user_id]
       );
     }
+  }
+
+  /**
+   * Explicitly attach an entity to an authorized secondary project
+   */
+  static async addProjectAssociation(dbOrConn, projectId, entityType, entityId, accessRole = 'contributor', addedBy = null) {
+    const pId = parseInt(projectId, 10);
+    const eId = parseInt(entityId, 10);
+    if (!pId || !eId) throw new Error('Valid projectId and entityId required');
+    await dbOrConn.query(
+      `INSERT INTO project_entities (project_id, entity_type, entity_id, access_role, added_by, created_at)
+       VALUES (?, ?, ?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE access_role = VALUES(access_role)`,
+      [pId, entityType, eId, accessRole, addedBy]
+    );
+  }
+
+  /**
+   * Explicitly remove an entity association from a specific project
+   */
+  static async removeProjectAssociation(dbOrConn, projectId, entityType, entityId) {
+    const pId = parseInt(projectId, 10);
+    const eId = parseInt(entityId, 10);
+    if (!pId || !eId) throw new Error('Valid projectId and entityId required');
+    await dbOrConn.query(
+      'DELETE FROM project_entities WHERE project_id = ? AND entity_type = ? AND entity_id = ?',
+      [pId, entityType, eId]
+    );
+  }
+
+  /**
+   * Retrieve all project associations for an entity
+   */
+  static async getProjectAssociations(dbOrConn, entityType, entityId) {
+    const eId = parseInt(entityId, 10);
+    const raw = await dbOrConn.query(
+      'SELECT pe.*, p.title as project_title FROM project_entities pe JOIN projects p ON p.id = pe.project_id WHERE pe.entity_type = ? AND pe.entity_id = ? ORDER BY pe.id ASC',
+      [entityType, eId]
+    );
+    return extractRows(raw);
   }
 
   /**
