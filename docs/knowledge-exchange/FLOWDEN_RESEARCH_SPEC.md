@@ -89,7 +89,12 @@ When instructed to research a subject and generate a Flowden Knowledge Package (
   ```markdown
   [[fkf:note-system-architecture|System Architecture]]
   ```
-- The target ID must match an existing `note-...` identifier in the package.
+- **Strict Invariant (Note-Only Targets):** An FKF inline WikiLink may **only** reference an existing Note ID (`note-...`) declared within the same package. This applies to both Note content (`notes[].content_markdown`) and the Project overview Markdown (`project.overview_markdown`).
+- **Non-Note References Strictly Forbidden:** Inline WikiLinks targeting Sources (`src-...`), Folders (`fld-...`), Projects (`proj-...`), Excerpts (`exc-...`), Tasks (`tsk-...`), or Boards (`brd-...`) are rejected by the parser and inspector.
+- **Source Citations:** Literature citations must be declared via the `relationships` array using `link_type: "cites"`, rather than as inline WikiLinks.
+- **Syntax Variants:**
+  - `[[fkf:<note-id>|<Display Label>]]` (Standard, with custom display text)
+  - `[[fkf:<note-id>]]` (Bare token, displays target note title)
 
 ### 2.6 Strict ID Prefix Conventions
 Every entity in the package MUST use lowercase alphanumeric identifiers with strict prefix conventions:

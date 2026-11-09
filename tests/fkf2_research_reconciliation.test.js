@@ -94,7 +94,13 @@ async function runReconciliationTestSuite() {
         id: 'note-surface-codes',
         title: 'Surface Code Thresholds',
         folder_id: 'fld-foundations',
-        content_markdown: '# Surface Codes\n\nDiscussion on [[fkf:src-kitaev-2003|Kitaev 2003]] and topological codes.'
+        content_markdown: '# Surface Codes\n\nDiscussion on [[fkf:note-anyon-models|Anyon Models]] and topological codes.'
+      },
+      {
+        id: 'note-anyon-models',
+        title: 'Anyon Models',
+        folder_id: 'fld-foundations',
+        content_markdown: '# Anyon Models\n\nTopological anyon models.'
       }
     ],
     sources: [
@@ -308,7 +314,7 @@ async function runReconciliationTestSuite() {
         id: 'note-ionizable-lipids',
         title: 'Ionizable Lipids and pKa Optimization',
         folder_id: 'fld-nanoparticle-chemistry',
-        content_markdown: '# Ionizable Lipids\n\nOptimizing apparent pKa to 6.2-6.8 facilitates neutral surface charge in bloodstream and cationic ionization inside endosomes [[fkf:src-cullis-2021|Cullis et al. 2021]].',
+        content_markdown: '# Ionizable Lipids\n\nOptimizing apparent pKa to 6.2-6.8 facilitates neutral surface charge in bloodstream and cationic ionization inside endosomes (Cullis et al. 2021). See [[fkf:note-endosomal-escape|Endosomal Escape]].',
         tags: ['biochemistry', 'lipids']
       },
       {

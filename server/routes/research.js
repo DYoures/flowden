@@ -423,29 +423,113 @@ router.delete('/:id', async (req, res, next) => {
     }
 
     if (isPermanent) {
+      const researchId = Number(req.params.id);
       const filePath = currentDoc.file_path;
       const conn = await db.getConnection();
       try {
         await conn.beginTransaction();
 
-        // 1. Delete associated file_uploads
-        await conn.query("DELETE FROM file_uploads WHERE entity_type = 'research' AND entity_id = ?", [req.params.id]);
-
-        // 2. Delete semantic entity_links
-        await conn.query(
-          "DELETE FROM entity_links WHERE (source_type = 'research' AND source_id = ?) OR (target_type = 'research' AND target_id = ?)",
-          [req.params.id, req.params.id]
+        // 1. Load the Research document and associated Excerpt IDs within the transaction
+        const docRows = await conn.query(
+          'SELECT id, user_id, project_id, file_path FROM research_documents WHERE id = ? FOR UPDATE',
+          [researchId]
         );
+        if (!docRows || docRows.length === 0) {
+          throw new Error('NOT_FOUND_OR_FORBIDDEN');
+        }
 
-        // 3. Delete excerpts
-        await conn.query('DELETE FROM research_excerpts WHERE research_id = ?', [req.params.id]);
+        const excerptRows = await conn.query(
+          'SELECT id FROM research_excerpts WHERE research_id = ?',
+          [researchId]
+        );
+        const excerptIds = (excerptRows || []).map(r => r.id).filter(Boolean);
 
-        // 4. Delete canonical entities and project_entities
-        await conn.query("DELETE FROM project_entities WHERE entity_type = 'research' AND entity_id = ?", [req.params.id]);
-        await conn.query("DELETE FROM entities WHERE entity_type = 'research' AND entity_id = ?", [req.params.id]);
+        // 2. Identify Board projection items referencing Research or Excerpts
+        let projectionItems = [];
+        if (excerptIds.length > 0) {
+          const excPlaceholders = excerptIds.map(() => '?').join(',');
+          projectionItems = await conn.query(
+            `SELECT id FROM board_items
+             WHERE ((reference_type = 'research' OR item_type = 'research_ref') AND reference_id = ?)
+                OR (reference_type = 'excerpt' AND reference_id IN (${excPlaceholders}))`,
+            [researchId, ...excerptIds]
+          );
+        } else {
+          projectionItems = await conn.query(
+            `SELECT id FROM board_items
+             WHERE (reference_type = 'research' OR item_type = 'research_ref') AND reference_id = ?`,
+            [researchId]
+          );
+        }
+        const projectionItemIds = (projectionItems || []).map(r => r.id).filter(Boolean);
 
-        // 5. Delete research document
-        await conn.query('DELETE FROM research_documents WHERE id = ?', [req.params.id]);
+        // 3. Remove connections attached to projection items that must be removed
+        if (projectionItemIds.length > 0) {
+          const itemPlaceholders = projectionItemIds.map(() => '?').join(',');
+          await conn.query(
+            `DELETE FROM board_item_connections
+             WHERE source_item_id IN (${itemPlaceholders}) OR target_item_id IN (${itemPlaceholders})`,
+            [...projectionItemIds, ...projectionItemIds]
+          );
+
+          // 4. Remove obsolete projection items without deleting unrelated Board items or Boards
+          await conn.query(
+            `DELETE FROM board_items WHERE id IN (${itemPlaceholders})`,
+            projectionItemIds
+          );
+        }
+
+        // 5. Remove semantic entity_links referencing Research or Excerpts on either source or target side
+        await conn.query(
+          `DELETE FROM entity_links
+           WHERE (source_type = 'research' AND source_id = ?)
+              OR (target_type = 'research' AND target_id = ?)`,
+          [researchId, researchId]
+        );
+        if (excerptIds.length > 0) {
+          const excPlaceholders = excerptIds.map(() => '?').join(',');
+          await conn.query(
+            `DELETE FROM entity_links
+             WHERE (source_type = 'excerpt' AND source_id IN (${excPlaceholders}))
+                OR (target_type = 'excerpt' AND target_id IN (${excPlaceholders}))`,
+            [...excerptIds, ...excerptIds]
+          );
+        }
+
+        // 6. Remove project_entities associations for Research document and Excerpts
+        await conn.query(
+          "DELETE FROM project_entities WHERE entity_type = 'research' AND entity_id = ?",
+          [researchId]
+        );
+        if (excerptIds.length > 0) {
+          const excPlaceholders = excerptIds.map(() => '?').join(',');
+          await conn.query(
+            `DELETE FROM project_entities WHERE entity_type = 'excerpt' AND entity_id IN (${excPlaceholders})`,
+            excerptIds
+          );
+        }
+
+        // 7. Remove canonical entities records for Research document and Excerpts
+        await conn.query(
+          "DELETE FROM entities WHERE entity_type = 'research' AND entity_id = ?",
+          [researchId]
+        );
+        if (excerptIds.length > 0) {
+          const excPlaceholders = excerptIds.map(() => '?').join(',');
+          await conn.query(
+            `DELETE FROM entities WHERE entity_type = 'excerpt' AND entity_id IN (${excPlaceholders})`,
+            excerptIds
+          );
+        }
+
+        // 8. Remove research_excerpts records
+        await conn.query('DELETE FROM research_excerpts WHERE research_id = ?', [researchId]);
+
+        // 9. Remove file_uploads record associated with Research document
+        await conn.query("DELETE FROM file_uploads WHERE entity_type = 'research' AND entity_id = ?", [researchId]);
+
+        // 10. Remove research_documents record
+        await conn.query('DELETE FROM research_documents WHERE id = ?', [researchId]);
 
         await conn.commit();
       } catch (txErr) {

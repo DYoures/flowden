@@ -769,12 +769,24 @@ async function inspectKnowledgePackage({
       const overviewText = fs.readFileSync(overviewEntry.diskPath, 'utf8');
       const overviewWikiLinks = extractFkfWikiLinks(overviewText);
       for (const wl of overviewWikiLinks) {
-        if (!wl.validSyntax || !idRegistry.has(wl.targetId)) {
+        if (!wl.validSyntax) {
           errors.push({
             code: 'INVALID_WIKILINK_ID',
             file: 'project/overview.md',
             token: wl.rawToken,
-            message: `WikiLink "${wl.rawToken}" in project/overview.md references unknown or invalid package ID "${wl.targetId}".`
+            targetId: wl.targetId,
+            message: `WikiLink "${wl.rawToken}" in project/overview.md has invalid syntax.`
+          });
+        } else if (!noteIdSet.has(wl.targetId)) {
+          const isNonNote = idRegistry.has(wl.targetId);
+          errors.push({
+            code: 'INVALID_WIKILINK_ID',
+            file: 'project/overview.md',
+            token: wl.rawToken,
+            targetId: wl.targetId,
+            message: isNonNote
+              ? `WikiLink "${wl.rawToken}" in project/overview.md references non-note entity "${wl.targetId}". FKF inline WikiLinks may only reference Note IDs.`
+              : `WikiLink "${wl.rawToken}" in project/overview.md references unknown Note ID "${wl.targetId}".`
           });
         }
       }
@@ -862,13 +874,26 @@ async function inspectKnowledgePackage({
 
       const noteWikiLinks = extractFkfWikiLinks(fm.body);
       for (const wl of noteWikiLinks) {
-        if (!wl.validSyntax || !idRegistry.has(wl.targetId)) {
+        if (!wl.validSyntax) {
           errors.push({
             code: 'INVALID_WIKILINK_ID',
             file: noteMeta.file,
             entityId: noteMeta.id,
             token: wl.rawToken,
-            message: `WikiLink "${wl.rawToken}" in "${noteMeta.file}" references unknown or invalid package ID "${wl.targetId}".`
+            targetId: wl.targetId,
+            message: `WikiLink "${wl.rawToken}" in "${noteMeta.file}" has invalid syntax.`
+          });
+        } else if (!noteIdSet.has(wl.targetId)) {
+          const isNonNote = idRegistry.has(wl.targetId);
+          errors.push({
+            code: 'INVALID_WIKILINK_ID',
+            file: noteMeta.file,
+            entityId: noteMeta.id,
+            token: wl.rawToken,
+            targetId: wl.targetId,
+            message: isNonNote
+              ? `WikiLink "${wl.rawToken}" in "${noteMeta.file}" references non-note entity "${wl.targetId}". FKF inline WikiLinks may only reference Note IDs.`
+              : `WikiLink "${wl.rawToken}" in "${noteMeta.file}" references unknown Note ID "${wl.targetId}".`
           });
         }
       }
