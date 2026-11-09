@@ -20,6 +20,51 @@ const {
   MAX_COMPRESSED_ARCHIVE_BYTES
 } = require('./packageInspectionService');
 const { extractValidatedZipToStaging } = require('../utils/zipSafeInspector');
+const {
+  stripYamlFrontmatter,
+  parseFkfDocument,
+  stageCanonicalPackage
+} = require('../utils/fkfCanonicalParser');
+
+function isFkfJsonFile(filePath, filename) {
+  const ext = path.extname(filename || filePath || '').toLowerCase();
+  if (ext === '.fkf' || ext === '.json') {
+    return true;
+  }
+  try {
+    if (fs.existsSync(filePath)) {
+      const fd = fs.openSync(filePath, 'r');
+      const buf = Buffer.alloc(64);
+      const bytesRead = fs.readSync(fd, buf, 0, 64, 0);
+      fs.closeSync(fd);
+      const head = buf.slice(0, bytesRead).toString('utf8').trim();
+      if (head.startsWith('{')) {
+        return true;
+      }
+    }
+  } catch (_) {}
+  return false;
+}
+
+function derivePlaintextExcerpt(markdownText, maxLen = 150) {
+  if (!markdownText) return '';
+  const text = String(markdownText)
+    .replace(/^---[\s\S]*?---\s*/, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '')
+    .replace(/\[\[(?:[^|\]]*\|)?([^\]]+)\]\]/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^#+\s+/gm, '')
+    .replace(/[*_~]+/g, '')
+    .replace(/^\s*>\s*/gm, '')
+    .replace(/\r?\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen).trim() + '...';
+}
 
 const JOURNAL_DIR = path.resolve(__dirname, '..', '..', 'temp', 'fkp_journals');
 const VAULT_UPLOADS_DIR = path.resolve(__dirname, '..', '..', 'uploads', 'vault');
@@ -316,7 +361,20 @@ class KnowledgeExchangeService {
       'utf8'
     );
 
-    const centralDir = await extractValidatedZipToStaging(zipFilePath, stageDir);
+    let centralDir = null;
+    if (isFkfJsonFile(zipFilePath, originalFilename)) {
+      const rawFkf = fs.readFileSync(zipFilePath, 'utf8');
+      const parseRes = parseFkfDocument(rawFkf);
+      if (!parseRes.valid) {
+        const err = new Error('FKF JSON package failed validation.');
+        err.code = 'PACKAGE_VALIDATION_FAILED';
+        err.errors = parseRes.errors;
+        throw err;
+      }
+      stageCanonicalPackage(parseRes.canonical, stageDir);
+    } else {
+      centralDir = await extractValidatedZipToStaging(zipFilePath, stageDir);
+    }
 
     // Initialize Write-Ahead Journal
     const journalData = {
@@ -555,23 +613,78 @@ class KnowledgeExchangeService {
         finalTitle: targetProjectTitle
       });
 
-      // 2. Folders (Topologically sorted)
+      // 2. Folders (Topologically sorted and project-scoped)
       const sortedFolders = topologicalSortFolders(foldersDoc.folders || []);
       for (const f of sortedFolders) {
         const parentDbId = f.parent_id && packageIdMap.has(f.parent_id)
           ? packageIdMap.get(f.parent_id).dbId
           : null;
 
+        const folderName = f.name.trim();
+
+        // Check for existing matching folder in target project
+        const existingFolders = await conn.query(
+          `SELECT id, name FROM note_folders 
+           WHERE user_id = ? 
+             AND (project_id = ? OR project_id IS NULL)
+             AND (parent_folder_id <=> ?)
+             AND LOWER(name) = LOWER(?)
+           LIMIT 1`,
+          [userId, targetProjectId, parentDbId, folderName]
+        );
+
+        if (existingFolders && existingFolders.length > 0) {
+          if (conflictResolution === 'link_to_existing') {
+            const ef = existingFolders[0];
+            packageIdMap.set(f.id, {
+              entityType: 'folder',
+              dbId: ef.id,
+              finalTitle: ef.name
+            });
+            continue;
+          } else if (conflictResolution === 'skip') {
+            packageIdMap.set(f.id, {
+              entityType: 'folder',
+              dbId: parentDbId,
+              finalTitle: 'Skipped'
+            });
+            continue;
+          }
+        }
+
+        // Default: disambiguate name if conflict exists
+        let finalFolderName = folderName;
+        if (existingFolders && existingFolders.length > 0) {
+          let suffix = 1;
+          while (true) {
+            const candidate = `${folderName} (${suffix})`;
+            const collision = await conn.query(
+              `SELECT id FROM note_folders 
+               WHERE user_id = ? 
+                 AND (project_id = ? OR project_id IS NULL)
+                 AND (parent_folder_id <=> ?)
+                 AND LOWER(name) = LOWER(?)
+               LIMIT 1`,
+              [userId, targetProjectId, parentDbId, candidate]
+            );
+            if (!collision || collision.length === 0) {
+              finalFolderName = candidate;
+              break;
+            }
+            suffix++;
+          }
+        }
+
         const fIns = await conn.query(
-          `INSERT INTO note_folders (user_id, parent_folder_id, name, sort_order)
-           VALUES (?, ?, ?, ?)`,
-          [userId, parentDbId, f.name.trim(), f.sort_order || 0]
+          `INSERT INTO note_folders (user_id, project_id, parent_folder_id, name, sort_order)
+           VALUES (?, ?, ?, ?, ?)`,
+          [userId, targetProjectId, parentDbId, finalFolderName, f.sort_order || 0]
         );
         const folderDbId = fIns.insertId || (fIns[0] && fIns[0].insertId);
         packageIdMap.set(f.id, {
           entityType: 'folder',
           dbId: folderDbId,
-          finalTitle: f.name.trim()
+          finalTitle: finalFolderName
         });
         createdSummary.folder_count += 1;
       }
@@ -691,11 +804,16 @@ class KnowledgeExchangeService {
         overviewContent = `# ${targetProjectTitle}\n\n${manifest.project.summary || ''}`;
       }
 
-      const overviewTitle = `${targetProjectTitle} — Project Overview`;
+      const isExistingProj = Boolean(destinationProjectId);
+      const overviewTitle = isExistingProj
+        ? `${manifest.project.title || targetProjectTitle} — Overview (Imported ${new Date().toISOString().slice(0, 10)})`
+        : `${targetProjectTitle} — Project Overview`;
+      const isPinned = isExistingProj ? 0 : 1;
+
       const ovIns = await conn.query(
         `INSERT INTO notes (user_id, project_id, folder_id, title, content, is_pinned, word_count)
-         VALUES (?, ?, NULL, ?, ?, 1, ?)`,
-        [userId, targetProjectId, overviewTitle, overviewContent, countWords(overviewContent)]
+         VALUES (?, ?, NULL, ?, ?, ?, ?)`,
+        [userId, targetProjectId, overviewTitle, overviewContent, isPinned, countWords(overviewContent)]
       );
       const overviewNoteId = ovIns.insertId || (ovIns[0] && ovIns[0].insertId);
       packageIdMap.set('__project_overview__', {
@@ -733,11 +851,14 @@ class KnowledgeExchangeService {
             rawNoteMd = fs.readFileSync(noteStagePath, 'utf8');
           }
 
-          let finalNoteTitle = noteMeta.title.trim();
-          // Title disambiguation if user already has an active note with this exact title
+          // Strip YAML frontmatter from Note body
+          const { frontmatter, body: cleanNoteMd } = stripYamlFrontmatter(rawNoteMd);
+
+          let finalNoteTitle = (noteMeta.title || frontmatter.title || 'Untitled Note').trim();
+          // Title disambiguation if user already has an active note with this exact title in destination project
           const existingNoteSameTitle = await conn.query(
-            'SELECT id FROM notes WHERE user_id = ? AND title = ? AND deleted_at IS NULL LIMIT 1',
-            [userId, finalNoteTitle]
+            'SELECT id FROM notes WHERE user_id = ? AND (project_id = ? OR project_id IS NULL) AND title = ? AND deleted_at IS NULL LIMIT 1',
+            [userId, targetProjectId, finalNoteTitle]
           );
           if (existingNoteSameTitle && existingNoteSameTitle.length > 0 && conflictResolution === 'disambiguate') {
             finalNoteTitle = `${finalNoteTitle} (Imported)`;
@@ -755,9 +876,9 @@ class KnowledgeExchangeService {
               targetProjectId,
               targetFolderDbId,
               finalNoteTitle,
-              rawNoteMd,
+              cleanNoteMd,
               noteMeta.is_pinned ? 1 : 0,
-              countWords(rawNoteMd)
+              countWords(cleanNoteMd)
             ]
           );
           const noteDbId = nIns.insertId || (nIns[0] && nIns[0].insertId);
@@ -772,7 +893,7 @@ class KnowledgeExchangeService {
           await conn.query(
             `INSERT INTO entities (uuid, entity_type, entity_id, owner_user_id, primary_project_id, title, search_text)
              VALUES (UUID(), 'note', ?, ?, ?, ?, ?)`,
-            [noteDbId, userId, targetProjectId, finalNoteTitle, rawNoteMd]
+            [noteDbId, userId, targetProjectId, finalNoteTitle, cleanNoteMd]
           );
           await conn.query(
             `INSERT INTO project_entities (project_id, entity_type, entity_id, access_role, added_by)
@@ -782,39 +903,44 @@ class KnowledgeExchangeService {
           await conn.query(
             `INSERT INTO note_versions (note_id, user_id, title, content_markdown, content, version_number)
              VALUES (?, ?, ?, ?, ?, 1)`,
-            [noteDbId, userId, finalNoteTitle, rawNoteMd, rawNoteMd]
+            [noteDbId, userId, finalNoteTitle, cleanNoteMd, cleanNoteMd]
           );
 
-          // Tags
-          if (noteMeta.tags && Array.isArray(noteMeta.tags)) {
-            for (const tagName of noteMeta.tags) {
-              const cleanTag = String(tagName).trim();
-              if (!cleanTag) continue;
-              let tRows = await conn.query(
-                'SELECT id FROM note_tags WHERE user_id = ? AND name = ? LIMIT 1',
+          // Combined Tags from metadata and frontmatter
+          const combinedTags = new Set();
+          if (Array.isArray(noteMeta.tags)) {
+            noteMeta.tags.forEach(t => combinedTags.add(String(t).trim()));
+          }
+          if (Array.isArray(frontmatter.tags)) {
+            frontmatter.tags.forEach(t => combinedTags.add(String(t).trim()));
+          }
+
+          for (const cleanTag of combinedTags) {
+            if (!cleanTag) continue;
+            let tRows = await conn.query(
+              'SELECT id FROM note_tags WHERE user_id = ? AND name = ? LIMIT 1',
+              [userId, cleanTag]
+            );
+            let tagId;
+            if (tRows && tRows.length > 0) {
+              tagId = tRows[0].id;
+            } else {
+              const tIns = await conn.query(
+                'INSERT INTO note_tags (user_id, name) VALUES (?, ?)',
                 [userId, cleanTag]
               );
-              let tagId;
-              if (tRows && tRows.length > 0) {
-                tagId = tRows[0].id;
-              } else {
-                const tIns = await conn.query(
-                  'INSERT INTO note_tags (user_id, name) VALUES (?, ?)',
-                  [userId, cleanTag]
-                );
-                tagId = tIns.insertId || (tIns[0] && tIns[0].insertId);
-              }
-              await conn.query(
-                'INSERT IGNORE INTO note_tag_map (note_id, tag_id) VALUES (?, ?)',
-                [noteDbId, tagId]
-              );
+              tagId = tIns.insertId || (tIns[0] && tIns[0].insertId);
             }
+            await conn.query(
+              'INSERT IGNORE INTO note_tag_map (note_id, tag_id) VALUES (?, ?)',
+              [noteDbId, tagId]
+            );
           }
 
           importedNotes.push({
             packageId: noteMeta.id,
             dbId: noteDbId,
-            rawContent: rawNoteMd,
+            rawContent: cleanNoteMd,
             title: finalNoteTitle
           });
         }
@@ -986,15 +1112,22 @@ class KnowledgeExchangeService {
               'contradicts', 'inspired_by', 'depends_on', 'blocks', 'relates_to'
             ];
             const finalLinkType = validLinkTypes.includes(link.link_type) ? link.link_type : 'relates_to';
-            const finalOrigin = link.link_type === 'cites' ? 'citation' : 'manual';
+            const validOrigins = [
+              'manual', 'ai_suggested', 'citation', 'rule_engine', 'system_event', 'template_seed', 'graph_inference', 'task_sync'
+            ];
+            const origin = link.origin && validOrigins.includes(link.origin) ? link.origin : (link.link_type === 'cites' ? 'citation' : 'ai_suggested');
+            // origin 'ai_suggested' must have is_confirmed = 0
+            const isConfirmed = origin === 'ai_suggested' ? 0 : (link.is_confirmed !== undefined ? (link.is_confirmed ? 1 : 0) : 1);
             const contextSnippet = link.context_snippet ? String(link.context_snippet).slice(0, 500) : null;
 
             await conn.query(
               `INSERT INTO entity_links (
                 user_id, source_type, source_id, target_type, target_id,
                 link_type, origin, context_snippet, is_confirmed, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
-              ON DUPLICATE KEY UPDATE is_confirmed = 1, updated_at = NOW()`,
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+              ON DUPLICATE KEY UPDATE 
+                context_snippet = COALESCE(VALUES(context_snippet), entity_links.context_snippet),
+                updated_at = NOW()`,
               [
                 userId,
                 source.entityType,
@@ -1002,19 +1135,14 @@ class KnowledgeExchangeService {
                 target.entityType,
                 target.dbId,
                 finalLinkType,
-                finalOrigin,
-                contextSnippet
+                origin,
+                contextSnippet,
+                isConfirmed
               ]
             );
             createdSummary.relationship_count += 1;
-
-            if (source.entityType === 'note' && target.entityType === 'note') {
-              await conn.query(
-                `INSERT IGNORE INTO note_links (source_note_id, target_note_id)
-                 VALUES (?, ?)`,
-                [source.dbId, target.dbId]
-              );
-            }
+            // NOTE: Do not insert into note_links from package semantic links.
+            // note_links is strictly reserved for genuine inline Markdown WikiLinks synced via Note.syncWikiLinks().
           }
         }
       }
@@ -1043,6 +1171,20 @@ class KnowledgeExchangeService {
           boardDbId = bIns.insertId || (bIns[0] && bIns[0].insertId);
         }
         packageIdMap.set(b.id, { entityType: 'board', dbId: boardDbId, finalTitle: b.title.trim() });
+
+        // Register board in canonical entities & project_entities
+        await conn.query(
+          `INSERT INTO entities (uuid, entity_type, entity_id, owner_user_id, primary_project_id, title, search_text)
+           VALUES (UUID(), 'board', ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE title = VALUES(title), search_text = VALUES(search_text), updated_at = NOW()`,
+          [boardDbId, userId, targetProjectId, b.title.trim(), `${b.title} ${b.description || ''}`]
+        );
+        await conn.query(
+          `INSERT INTO project_entities (project_id, entity_type, entity_id, access_role, added_by)
+           VALUES (?, 'board', ?, 'contributor', ?)
+           ON DUPLICATE KEY UPDATE access_role = VALUES(access_role)`,
+          [targetProjectId, boardDbId, userId]
+        );
 
         // Groups
         if (b.groups && Array.isArray(b.groups)) {
@@ -1077,6 +1219,25 @@ class KnowledgeExchangeService {
             const validItemTypes = ['note', 'idea', 'image', 'link', 'research_ref', 'task', 'document'];
             const finalItemType = validItemTypes.includes(itemType) ? itemType : 'idea';
 
+            let cardTitle = item.title || 'Board Item';
+            let cardContent = item.content || null;
+
+            if (refType === 'note' && refId) {
+              // Board card is a projection: title and plain-text excerpt derived from canonical Note
+              const mappedNote = importedNotes.find(n => n.dbId === refId);
+              let noteBody = mappedNote ? mappedNote.rawContent : '';
+              if (!noteBody) {
+                const [nRow] = await conn.query('SELECT title, content FROM notes WHERE id = ? LIMIT 1', [refId]);
+                if (nRow && nRow.length > 0) {
+                  noteBody = nRow[0].content || '';
+                  if (!item.title) cardTitle = nRow[0].title;
+                }
+              } else if (!item.title && mappedNote.title) {
+                cardTitle = mappedNote.title;
+              }
+              cardContent = derivePlaintextExcerpt(noteBody, 150);
+            }
+
             const bitmIns = await conn.query(
               `INSERT INTO board_items (
                 board_id, user_id, item_type, reference_type, reference_id,
@@ -1088,8 +1249,8 @@ class KnowledgeExchangeService {
                 finalItemType,
                 refType,
                 refId,
-                item.title || 'Board Item',
-                item.content || null,
+                cardTitle,
+                cardContent,
                 item.position_x || 0,
                 item.position_y || 0,
                 item.width || 250,

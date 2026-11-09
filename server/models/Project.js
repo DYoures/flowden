@@ -58,16 +58,26 @@ class Project {
     );
 
     const newProjectId = result.insertId;
-    await db.query(
+    const bRes = await db.query(
       'INSERT INTO boards (project_id, user_id, title, description) VALUES (?, ?, ?, ?)',
       [newProjectId, userId, `${title.trim()} Board`, 'Spatial workspace board']
     );
+    const newBoardId = bRes.insertId || (bRes[0] && bRes[0].insertId);
 
     // Record owner membership per migration 005 and search authorization requirements
     await db.query(
       'INSERT INTO project_members (project_id, user_id, role, created_at) VALUES (?, ?, "owner", NOW()) ON DUPLICATE KEY UPDATE role = "owner"',
       [newProjectId, userId]
     );
+
+    // Register project and default board in universal entity registry
+    try {
+      const EntitySyncService = require('../services/entitySyncService');
+      await EntitySyncService.syncProjectEntity(db, newProjectId, userId);
+      if (newBoardId) {
+        await EntitySyncService.syncBoardEntity(db, newBoardId, userId);
+      }
+    } catch (_) {}
 
     return this.findById(newProjectId, userId);
   }

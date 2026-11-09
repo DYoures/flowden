@@ -177,7 +177,11 @@ router.post('/inspect', (req, res) => {
         if (!fs.existsSync(inspectionStagingDir)) {
           fs.mkdirSync(inspectionStagingDir, { recursive: true });
         }
-        const stagedPackagePath = path.join(inspectionStagingDir, 'inspected_package.flowden.zip');
+        const isFkf = path.extname(uploadedPath).toLowerCase() === '.fkf' ||
+                      path.extname(uploadedPath).toLowerCase() === '.json' ||
+                      (report.package && (report.package.format === 'flowden-knowledge-format' || report.package.name?.endsWith('.fkf')));
+        const stagedPackageName = isFkf ? 'inspected_package.fkf' : 'inspected_package.flowden.zip';
+        const stagedPackagePath = path.join(inspectionStagingDir, stagedPackageName);
         fs.copyFileSync(uploadedPath, stagedPackagePath);
 
         // Write active lock file preventing premature background cleanup
@@ -281,6 +285,149 @@ router.post('/inspect', (req, res) => {
       }
     }
   });
+});
+
+/**
+ * POST /api/v1/exchange/inspect-json
+ * Safely inspects and validates a direct FKF 2.0 JSON payload without file upload,
+ * computes SHA-256, stages canonical package, and issues an inspection token.
+ */
+router.post('/inspect-json', express.json({ limit: '10mb' }), async (req, res) => {
+  const rate = SecurityService.checkRateLimit('exchange_inspect', String(req.user.id), 100, 60 * 1000);
+  if (!rate.allowed) {
+    return res.status(429).json({
+      valid: false,
+      error: 'Inspection rate limit exceeded. Please wait before inspecting more packages.',
+      retryAfterSeconds: rate.retryAfterSeconds
+    });
+  }
+
+  const payload = req.body && req.body.package_json ? req.body.package_json : req.body;
+  if (!payload || typeof payload !== 'object' || Object.keys(payload).length === 0) {
+    return res.status(400).json({
+      valid: false,
+      error: 'Missing FKF JSON document. Provide a valid JSON object.',
+      errors: [{ code: 'MISSING_JSON_PAYLOAD', message: 'No JSON payload provided.' }]
+    });
+  }
+
+  const token = crypto.randomBytes(8).toString('hex');
+  const tempFkfPath = path.join(UPLOAD_TEMP_DIR, `fkp_inspect_json_${Date.now()}_${token}.fkf`);
+  try {
+    fs.writeFileSync(tempFkfPath, JSON.stringify(payload), 'utf8');
+
+    let destinationProjectId = req.body.destination_project_id || req.query.destination_project_id || null;
+    if (destinationProjectId) {
+      destinationProjectId = parseInt(destinationProjectId, 10);
+      const hasAccess = await Project.findById(destinationProjectId, req.user.id);
+      if (!hasAccess) {
+        return res.status(403).json({
+          valid: false,
+          error: 'You do not have access to the specified destination project.',
+          errors: [{ code: 'PROJECT_ACCESS_DENIED', message: 'Unauthorized destination project.' }]
+        });
+      }
+    }
+
+    const report = await inspectKnowledgePackage({
+      zipFilePath: tempFkfPath,
+      originalFilename: 'package.fkf',
+      userId: req.user.id,
+      ip: req.ip
+    });
+
+    let inspectionToken = null;
+    const expiresInSeconds = 900;
+
+    if (report.valid) {
+      const stagingOpId = report.operation_id || `insp_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+      const inspectionStagingDir = path.join(UPLOAD_TEMP_DIR, `fkp_staged_${stagingOpId}`);
+      if (!fs.existsSync(inspectionStagingDir)) {
+        fs.mkdirSync(inspectionStagingDir, { recursive: true });
+      }
+      const stagedPackagePath = path.join(inspectionStagingDir, 'inspected_package.fkf');
+      fs.copyFileSync(tempFkfPath, stagedPackagePath);
+
+      fs.writeFileSync(
+        path.join(inspectionStagingDir, '.active.lock'),
+        JSON.stringify({
+          userId: req.user.id,
+          operationId: stagingOpId,
+          expiresAt: Date.now() + expiresInSeconds * 1000
+        }),
+        'utf8'
+      );
+
+      const rawToken = 'fkp_tok_' + crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const ticketId = `ticket_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+
+      await db.query(
+        `INSERT INTO knowledge_exchange_tickets (
+          id, ticket_hash, operation_id, user_id, package_sha256,
+          destination_project_id, staging_dir, staged_package_path,
+          package_name, report_json, is_consumed, created_at, expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, NOW(), DATE_ADD(NOW(), INTERVAL 15 MINUTE))`,
+        [
+          ticketId,
+          tokenHash,
+          stagingOpId,
+          req.user.id,
+          report.package.sha256,
+          destinationProjectId || null,
+          inspectionStagingDir,
+          stagedPackagePath,
+          'package.fkf',
+          JSON.stringify(report)
+        ]
+      );
+
+      inspectionToken = rawToken;
+    }
+
+    const responsePayload = {
+      valid: report.valid,
+      inspection_token: inspectionToken,
+      expires_in_seconds: report.valid ? expiresInSeconds : null,
+      operation_id: report.operation_id,
+      package_name: report.package.name,
+      package_id: report.package.package_id,
+      format: report.package.format,
+      fkf_version: report.package.fkf_version,
+      project: report.project,
+      folder_count: report.counts.folders,
+      note_count: report.counts.notes,
+      source_count: report.counts.sources,
+      excerpt_count: report.counts.excerpts,
+      relationship_count: report.counts.relationships,
+      asset_count: report.counts.assets,
+      task_count: report.counts.tasks,
+      board_item_count: report.counts.board_items,
+      optional_modules: report.optional_modules,
+      errors: report.validation.errors,
+      warnings: report.validation.warnings,
+      unsupported_features: report.validation.unsupported_features,
+      package: report.package,
+      package_sha256: report.package.sha256,
+      counts: report.counts,
+      validation: report.validation,
+      preview: report.preview,
+      staging_cleaned_up: report.staging_cleaned_up,
+      phase2b_preconditions: report.phase2b_preconditions
+    };
+
+    return res.status(report.valid ? 200 : 422).json(responsePayload);
+  } catch (err) {
+    return res.status(500).json({
+      valid: false,
+      error: 'Internal error while inspecting JSON package.',
+      errors: [{ code: 'INTERNAL_INSPECTION_ERROR', message: err.message }]
+    });
+  } finally {
+    if (fs.existsSync(tempFkfPath)) {
+      try { fs.unlinkSync(tempFkfPath); } catch (_) {}
+    }
+  }
 });
 
 /**

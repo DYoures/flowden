@@ -175,7 +175,12 @@
     if (privateSession.step === 'select') {
       const hasFile = Boolean(privateSession.file);
       const isFileSizeValid = hasFile ? privateSession.file.size <= MAX_COMPRESSED_BYTES : true;
-      const isExtValid = hasFile ? (privateSession.file.name.toLowerCase().endsWith('.zip') || privateSession.file.name.toLowerCase().endsWith('.flowden.zip')) : true;
+      const isExtValid = hasFile ? (
+        privateSession.file.name.toLowerCase().endsWith('.zip') ||
+        privateSession.file.name.toLowerCase().endsWith('.flowden.zip') ||
+        privateSession.file.name.toLowerCase().endsWith('.fkf') ||
+        privateSession.file.name.toLowerCase().endsWith('.json')
+      ) : true;
 
       bodyEl.innerHTML = `
         ${stepsHtml}
@@ -220,12 +225,12 @@
         <!-- File Upload Dropzone -->
         <div style="margin-bottom: var(--space-4);">
           <label style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-primary); margin-bottom: 8px;">
-            Package Archive (.flowden.zip)
+            Knowledge Package (.fkf, .flowden.zip)
           </label>
           
           ${!hasFile ? `
             <div id="exchange-dropzone" style="border: 2px dashed var(--border-primary); border-radius: var(--radius-sm); padding: var(--space-6) var(--space-4); text-align: center; background-color: var(--bg-secondary); cursor: pointer; transition: all 0.15s ease;">
-              <input type="file" id="exchange-file-input" accept=".zip,.flowden.zip" style="display: none;" />
+              <input type="file" id="exchange-file-input" accept=".zip,.flowden.zip,.fkf,.json" style="display: none;" />
               <div style="width: 40px; height: 40px; border-radius: var(--radius-sm); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); display: inline-flex; align-items: center; justify-content: center; color: var(--accent-primary); margin-bottom: 8px;">
                 ${getIcon('download')}
               </div>
@@ -233,7 +238,7 @@
                 Click to browse or drag & drop package archive
               </div>
               <div class="text-secondary" style="font-size: 11px; line-height: 1.5; max-width: 440px; margin: 0 auto;">
-                Accepts <code style="color: var(--accent-primary);">.flowden.zip</code> conforming to FKF v1.0.0. Maximum compressed archive size: <strong>100 MB</strong>.
+                Accepts <code style="color: var(--accent-primary);">.fkf</code> (FKF 2.0 single file) or <code style="color: var(--accent-primary);">.flowden.zip</code> (package archive). Maximum compressed archive size: <strong>100 MB</strong>.
               </div>
             </div>
           ` : `
@@ -258,7 +263,7 @@
           ${(!isExtValid || !isFileSizeValid) ? `
             <div style="margin-top: 8px; padding: 8px 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-sm); font-size: 11px; color: var(--status-error); display: flex; align-items: center; gap: 6px;">
               <span>${getIcon('x')}</span>
-              <span>${!isExtValid ? 'Invalid file extension. Please select a .flowden.zip archive.' : 'File exceeds 100 MB limit.'}</span>
+              <span>${!isExtValid ? 'Invalid file extension. Please select a .fkf or .flowden.zip package.' : 'File exceeds 100 MB limit.'}</span>
             </div>
           ` : ''}
         </div>

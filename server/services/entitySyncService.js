@@ -121,6 +121,132 @@ class EntitySyncService {
   }
 
   /**
+   * Synchronize a Project with the canonical entities registry
+   * (Note: Projects are root containers; NEVER inserted into project_entities)
+   */
+  static async syncProjectEntity(dbOrConn, projectId, userId) {
+    const rawProj = await dbOrConn.query(
+      'SELECT id, user_id, title, description, status FROM projects WHERE id = ? LIMIT 1',
+      [projectId]
+    );
+    const projRows = extractRows(rawProj);
+    if (!projRows || projRows.length === 0) return null;
+    const project = projRows[0];
+
+    const cleanTitle = (project.title || 'Untitled Project').trim();
+    const searchText = (project.description || '').trim();
+
+    const rawExisting = await dbOrConn.query(
+      'SELECT id FROM entities WHERE entity_type = "project" AND entity_id = ? LIMIT 1',
+      [projectId]
+    );
+    const existingRows = extractRows(rawExisting);
+
+    if (existingRows && existingRows.length > 0) {
+      await dbOrConn.query(
+        'UPDATE entities SET title = ?, search_text = ?, primary_project_id = ?, deleted_at = NULL, updated_at = NOW() WHERE entity_type = "project" AND entity_id = ?',
+        [cleanTitle, searchText, projectId, projectId]
+      );
+    } else {
+      const uuid = crypto.randomUUID();
+      await dbOrConn.query(
+        'INSERT INTO entities (uuid, entity_type, entity_id, owner_user_id, primary_project_id, title, search_text, created_at, updated_at) VALUES (?, "project", ?, ?, ?, ?, ?, NOW(), NOW())',
+        [uuid, projectId, userId || project.user_id, projectId, cleanTitle, searchText]
+      );
+    }
+  }
+
+  /**
+   * Synchronize a Board with the canonical entities registry and project_entities
+   */
+  static async syncBoardEntity(dbOrConn, boardId, userId) {
+    const rawBoard = await dbOrConn.query(
+      'SELECT id, user_id, project_id, title, description FROM boards WHERE id = ? LIMIT 1',
+      [boardId]
+    );
+    const boardRows = extractRows(rawBoard);
+    if (!boardRows || boardRows.length === 0) return null;
+    const board = boardRows[0];
+
+    const cleanTitle = (board.title || 'Untitled Board').trim();
+    const searchText = (board.description || '').trim();
+    const projectId = board.project_id ? parseInt(board.project_id, 10) : null;
+
+    const rawExisting = await dbOrConn.query(
+      'SELECT id FROM entities WHERE entity_type = "board" AND entity_id = ? LIMIT 1',
+      [boardId]
+    );
+    const existingRows = extractRows(rawExisting);
+
+    if (existingRows && existingRows.length > 0) {
+      await dbOrConn.query(
+        'UPDATE entities SET title = ?, search_text = ?, primary_project_id = ?, deleted_at = NULL, updated_at = NOW() WHERE entity_type = "board" AND entity_id = ?',
+        [cleanTitle, searchText, projectId, boardId]
+      );
+    } else {
+      const uuid = crypto.randomUUID();
+      await dbOrConn.query(
+        'INSERT INTO entities (uuid, entity_type, entity_id, owner_user_id, primary_project_id, title, search_text, created_at, updated_at) VALUES (?, "board", ?, ?, ?, ?, ?, NOW(), NOW())',
+        [uuid, boardId, userId || board.user_id, projectId, cleanTitle, searchText]
+      );
+    }
+
+    if (projectId) {
+      await dbOrConn.query(
+        `INSERT INTO project_entities (project_id, entity_type, entity_id, access_role, added_by, created_at)
+         VALUES (?, 'board', ?, 'contributor', ?, NOW())
+         ON DUPLICATE KEY UPDATE project_entities.access_role = project_entities.access_role`,
+        [projectId, boardId, userId || board.user_id]
+      );
+    }
+  }
+
+  /**
+   * Synchronize a Research Document with the canonical entities registry and project_entities
+   */
+  static async syncResearchEntity(dbOrConn, researchId, userId) {
+    const rawRes = await dbOrConn.query(
+      'SELECT id, user_id, project_id, title, summary, content_text FROM research_documents WHERE id = ? LIMIT 1',
+      [researchId]
+    );
+    const resRows = extractRows(rawRes);
+    if (!resRows || resRows.length === 0) return null;
+    const doc = resRows[0];
+
+    const cleanTitle = (doc.title || 'Untitled Research').trim();
+    const searchText = `${doc.title || ''} ${doc.summary || ''} ${(doc.content_text || '').slice(0, 500)}`.trim();
+    const projectId = doc.project_id ? parseInt(doc.project_id, 10) : null;
+
+    const rawExisting = await dbOrConn.query(
+      'SELECT id FROM entities WHERE entity_type = "research" AND entity_id = ? LIMIT 1',
+      [researchId]
+    );
+    const existingRows = extractRows(rawExisting);
+
+    if (existingRows && existingRows.length > 0) {
+      await dbOrConn.query(
+        'UPDATE entities SET title = ?, search_text = ?, primary_project_id = ?, deleted_at = NULL, updated_at = NOW() WHERE entity_type = "research" AND entity_id = ?',
+        [cleanTitle, searchText, projectId, researchId]
+      );
+    } else {
+      const uuid = crypto.randomUUID();
+      await dbOrConn.query(
+        'INSERT INTO entities (uuid, entity_type, entity_id, owner_user_id, primary_project_id, title, search_text, created_at, updated_at) VALUES (?, "research", ?, ?, ?, ?, ?, NOW(), NOW())',
+        [uuid, researchId, userId || doc.user_id, projectId, cleanTitle, searchText]
+      );
+    }
+
+    if (projectId) {
+      await dbOrConn.query(
+        `INSERT INTO project_entities (project_id, entity_type, entity_id, access_role, added_by, created_at)
+         VALUES (?, 'research', ?, 'contributor', ?, NOW())
+         ON DUPLICATE KEY UPDATE project_entities.access_role = project_entities.access_role`,
+        [projectId, researchId, userId || doc.user_id]
+      );
+    }
+  }
+
+  /**
    * Soft-delete or remove canonical entity when note is deleted
    */
   static async deleteNoteEntity(dbOrConn, noteId) {

@@ -12,9 +12,35 @@ const {
   extractValidatedZipToStaging
 } = require('../utils/zipSafeInspector');
 const { validateFkfDocument } = require('../utils/fkfSchemaValidator');
+const {
+  parseFkfDocument,
+  stageCanonicalPackage,
+  stripYamlFrontmatter,
+  computeDeterministicSha256
+} = require('../utils/fkfCanonicalParser');
 
 const STAGING_BASE_DIR = path.resolve(__dirname, '..', '..', 'temp', 'fkp_inspect_staging');
 const UPLOAD_TEMP_DIR = path.resolve(__dirname, '..', '..', 'temp', 'fkp_inspect_uploads');
+
+function isFkfJsonFile(filePath, filename) {
+  const ext = path.extname(filename || filePath || '').toLowerCase();
+  if (ext === '.fkf' || ext === '.json') {
+    return true;
+  }
+  try {
+    if (fs.existsSync(filePath)) {
+      const fd = fs.openSync(filePath, 'r');
+      const buf = Buffer.alloc(64);
+      const bytesRead = fs.readSync(fd, buf, 0, 64, 0);
+      fs.closeSync(fd);
+      const head = buf.slice(0, bytesRead).toString('utf8').trim();
+      if (head.startsWith('{')) {
+        return true;
+      }
+    }
+  } catch (_) {}
+  return false;
+}
 
 const REQUIRED_CORE_FILES = [
   'manifest.json',
@@ -257,6 +283,130 @@ async function inspectKnowledgePackage({
   let stagingCleanedUp = false;
 
   try {
+    // Check if package is an FKF 2.0 single-file JSON/text document
+    if (isFkfJsonFile(zipFilePath, originalFilename)) {
+      let rawFkfText = '';
+      try {
+        rawFkfText = fs.readFileSync(zipFilePath, 'utf8');
+      } catch (readErr) {
+        errors.push({
+          code: 'FILE_READ_ERROR',
+          file: originalFilename || 'package.fkf',
+          message: `Failed to read FKF file: ${readErr.message}`
+        });
+        return buildInspectionResponse();
+      }
+
+      const parseRes = parseFkfDocument(rawFkfText);
+      if (!parseRes.valid) {
+        errors.push(...parseRes.errors);
+        warnings.push(...parseRes.warnings);
+        await SecurityService.logSecurityEvent({
+          userId,
+          eventType: 'EXCHANGE_PACKAGE_ARCHIVE_REJECTED',
+          severity: 'high',
+          ip,
+          targetType: 'exchange_package',
+          targetId: operationId,
+          details: { originalFilename, errorCodes: errors.map(e => e.code) }
+        });
+        return buildInspectionResponse();
+      }
+
+      const canonical = parseRes.canonical;
+      archiveSha256 = canonical.sha256;
+      packageMeta = {
+        package_name: path.basename(originalFilename || 'package.fkf'),
+        package_id: canonical.package_id,
+        format: canonical.format,
+        fkf_version: canonical.fkf_version,
+        sha256: archiveSha256
+      };
+      projectMeta = canonical.project;
+      counts = {
+        folders: canonical.folders.length,
+        notes: canonical.notes.length,
+        sources: canonical.sources.length,
+        excerpts: canonical.sources.reduce((sum, s) => sum + (s.excerpts ? s.excerpts.length : 0), 0),
+        relationships: canonical.relationships.length,
+        assets: 0,
+        tasks: (canonical.optional_modules.tasks && canonical.optional_modules.tasks.tasks) ? canonical.optional_modules.tasks.tasks.length : 0,
+        board_items: (canonical.optional_modules.spatial_board && canonical.optional_modules.spatial_board.board && canonical.optional_modules.spatial_board.board.items) ? canonical.optional_modules.spatial_board.board.items.length : 0
+      };
+      optionalModulesPresent = {
+        tasks: counts.tasks > 0,
+        spatial_board: Boolean(canonical.optional_modules.spatial_board && canonical.optional_modules.spatial_board.board),
+        research_report_pdf: false
+      };
+
+      previewSummary = {
+        folders: canonical.folders.slice(0, 10).map(f => ({ id: f.id, name: f.name, parent_id: f.parent_id })),
+        notes: canonical.notes.slice(0, 10).map(n => ({
+          id: n.id,
+          title: n.title,
+          folder_id: n.folder_id,
+          word_count: n.content_markdown ? n.content_markdown.split(/\s+/).filter(Boolean).length : 0
+        })),
+        sources: canonical.sources.slice(0, 10).map(s => ({
+          id: s.id,
+          title: s.title,
+          source_type: s.source_type,
+          excerpt_count: s.excerpts ? s.excerpts.length : 0
+        })),
+        relationships: canonical.relationships.slice(0, 10).map(r => ({
+          source_id: r.source_id,
+          target_id: r.target_id,
+          link_type: r.link_type
+        })),
+        assets: []
+      };
+
+      const folderErrors = validateFolderHierarchy(canonical.folders);
+      if (folderErrors.length > 0) {
+        errors.push(...folderErrors);
+      }
+
+      // Check board reference projections if spatial board present
+      if (canonical.optional_modules.spatial_board && canonical.optional_modules.spatial_board.board) {
+        const b = canonical.optional_modules.spatial_board.board;
+        const validEntityIds = new Set([
+          ...canonical.notes.map(n => n.id),
+          ...canonical.sources.map(s => s.id),
+          ...(canonical.optional_modules.tasks && canonical.optional_modules.tasks.tasks ? canonical.optional_modules.tasks.tasks.map(t => t.id) : [])
+        ]);
+        for (const itm of b.items || []) {
+          if (itm.reference_package_id && !validEntityIds.has(itm.reference_package_id)) {
+            errors.push({
+              code: 'MISSING_RELATIONSHIP_TARGET',
+              file: 'spatial-board',
+              entityId: itm.id,
+              message: `Board item "${itm.id}" projects non-existent reference_package_id "${itm.reference_package_id}".`
+            });
+          }
+        }
+      }
+
+      stageCanonicalPackage(canonical, stagingDir);
+
+      await SecurityService.logSecurityEvent({
+        userId,
+        eventType: errors.length === 0 ? 'EXCHANGE_PACKAGE_INSPECTED_VALID' : 'EXCHANGE_PACKAGE_INSPECTED_INVALID',
+        severity: errors.length === 0 ? 'info' : 'warning',
+        ip,
+        targetType: 'exchange_package',
+        targetId: packageMeta.package_id || operationId,
+        details: {
+          operationId,
+          originalFilename,
+          valid: errors.length === 0,
+          errorCount: errors.length,
+          warningCount: warnings.length
+        }
+      });
+
+      return buildInspectionResponse();
+    }
+
     // =========================================================================
     // STAGE 1: CENTRAL DIRECTORY INSPECTION (PRE-EXTRACTION)
     // =========================================================================

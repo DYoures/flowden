@@ -53,12 +53,19 @@ async function extractDocumentText(filePath, ext) {
 
     if (ext === '.pdf') {
       try {
-        const pdfParse = require('pdf-parse');
+        const pdfModule = require('pdf-parse');
         const dataBuffer = fs.readFileSync(filePath);
-        const data = await pdfParse(dataBuffer);
-        return data.text || '';
+        if (pdfModule && pdfModule.PDFParse) {
+          const parser = new pdfModule.PDFParse(new Uint8Array(dataBuffer));
+          const result = await parser.getText();
+          return (typeof result === 'string' ? result : (result && result.text)) || '';
+        } else if (typeof pdfModule === 'function') {
+          const data = await pdfModule(dataBuffer);
+          return data.text || '';
+        }
+        return '';
       } catch (pdfErr) {
-        return `[PDF Text Extraction Unavailable: ${pdfErr.message}]`;
+        return '';
       }
     }
 
@@ -68,7 +75,7 @@ async function extractDocumentText(filePath, ext) {
         const result = await mammoth.extractRawText({ path: filePath });
         return result.value || '';
       } catch (docxErr) {
-        return `[DOCX Text Extraction Unavailable: ${docxErr.message}]`;
+        return '';
       }
     }
 
