@@ -244,6 +244,7 @@ async function inspectKnowledgePackage({
   const unsupportedFeatures = [];
 
   let archiveSha256 = null;
+  let canonicalSha256 = null;
   try {
     if (fs.existsSync(zipFilePath)) {
       archiveSha256 = crypto.createHash('sha256').update(fs.readFileSync(zipFilePath)).digest('hex');
@@ -255,7 +256,9 @@ async function inspectKnowledgePackage({
     package_id: null,
     format: null,
     fkf_version: null,
-    sha256: archiveSha256
+    sha256: archiveSha256,
+    raw_sha256: archiveSha256,
+    canonical_sha256: null
   };
   let projectMeta = null;
   let counts = {
@@ -314,13 +317,15 @@ async function inspectKnowledgePackage({
       }
 
       const canonical = parseRes.canonical;
-      archiveSha256 = canonical.sha256;
+      canonicalSha256 = canonical.sha256;
       packageMeta = {
         package_name: path.basename(originalFilename || 'package.fkf'),
         package_id: canonical.package_id,
         format: canonical.format,
         fkf_version: canonical.fkf_version,
-        sha256: archiveSha256
+        sha256: archiveSha256,
+        raw_sha256: archiveSha256,
+        canonical_sha256: canonicalSha256
       };
       projectMeta = canonical.project;
       counts = {
@@ -1180,9 +1185,13 @@ async function inspectKnowledgePackage({
         package_id: packageMeta.package_id,
         format: packageMeta.format,
         fkf_version: packageMeta.fkf_version,
-        sha256: archiveSha256
+        sha256: archiveSha256,
+        raw_sha256: archiveSha256,
+        canonical_sha256: canonicalSha256
       },
       package_sha256: archiveSha256,
+      raw_sha256: archiveSha256,
+      canonical_sha256: canonicalSha256,
       project: projectMeta,
       counts: {
         folders: counts.folders,

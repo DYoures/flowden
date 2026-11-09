@@ -52,20 +52,27 @@ async function extractDocumentText(filePath, ext) {
     }
 
     if (ext === '.pdf') {
+      let parser = null;
       try {
         const pdfModule = require('pdf-parse');
         const dataBuffer = fs.readFileSync(filePath);
         if (pdfModule && pdfModule.PDFParse) {
-          const parser = new pdfModule.PDFParse(new Uint8Array(dataBuffer));
+          parser = new pdfModule.PDFParse({ data: new Uint8Array(dataBuffer) });
           const result = await parser.getText();
-          return (typeof result === 'string' ? result : (result && result.text)) || '';
+          return (result && typeof result.text === 'string' ? result.text : '') || '';
         } else if (typeof pdfModule === 'function') {
           const data = await pdfModule(dataBuffer);
-          return data.text || '';
+          return (data && typeof data.text === 'string' ? data.text : '') || '';
         }
         return '';
       } catch (pdfErr) {
         return '';
+      } finally {
+        if (parser && typeof parser.destroy === 'function') {
+          try {
+            await parser.destroy();
+          } catch (_) {}
+        }
       }
     }
 
@@ -303,4 +310,5 @@ router.delete('/:id', async (req, res, next) => {
   }
 });
 
+router.extractDocumentText = extractDocumentText;
 module.exports = router;

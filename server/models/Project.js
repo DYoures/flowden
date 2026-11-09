@@ -43,6 +43,40 @@ class Project {
     return rows && rows[0] ? rows[0] : null;
   }
 
+  static async hasWriteAccess(id, userId, dbOrConn = db) {
+    if (!id || !userId) return false;
+    const rows = await dbOrConn.query(
+      `SELECT p.id, p.user_id as owner_id, pm.role as member_role
+       FROM projects p
+       LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ? AND pm.revoked_at IS NULL
+       WHERE p.id = ?
+       LIMIT 1`,
+      [userId, id]
+    );
+    if (!rows || rows.length === 0) return false;
+    const proj = rows[0];
+    if (proj.owner_id === userId) return true;
+    if (proj.member_role === 'owner' || proj.member_role === 'editor') return true;
+    return false;
+  }
+
+  static async getMemberRole(id, userId, dbOrConn = db) {
+    if (!id || !userId) return null;
+    const rows = await dbOrConn.query(
+      `SELECT p.id, p.user_id as owner_id, pm.role as member_role
+       FROM projects p
+       LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ? AND pm.revoked_at IS NULL
+       WHERE p.id = ?
+       LIMIT 1`,
+      [userId, id]
+    );
+    if (!rows || rows.length === 0) return null;
+    const proj = rows[0];
+    if (proj.owner_id === userId) return 'owner';
+    if (proj.member_role) return proj.member_role;
+    return null;
+  }
+
   static async create(userIdOrObj, maybeData = {}) {
     let userId = userIdOrObj;
     let data = maybeData;

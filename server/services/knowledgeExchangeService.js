@@ -174,16 +174,17 @@ class KnowledgeExchangeService {
     sortOrder = 0
   }) {
     const cleanName = String(folderName || '').trim();
+    const normalizedProjectId = (targetProjectId !== undefined && targetProjectId !== null) ? parseInt(targetProjectId, 10) : null;
 
-    // Check for existing matching folder in target project
+    // Check for existing matching folder strictly within the target project scope and parent hierarchy
     const existingFolders = await dbOrConn.query(
       `SELECT id, name FROM note_folders 
        WHERE user_id = ? 
-         AND (project_id = ? OR project_id IS NULL)
+         AND (project_id <=> ?)
          AND (parent_folder_id <=> ?)
          AND LOWER(name) = LOWER(?)
        LIMIT 1`,
-      [userId, targetProjectId, parentDbId, cleanName]
+      [userId, normalizedProjectId, parentDbId, cleanName]
     );
 
     if (existingFolders && existingFolders.length > 0) {
@@ -205,7 +206,7 @@ class KnowledgeExchangeService {
       }
     }
 
-    // Default: disambiguate name if conflict exists
+    // Default: disambiguate name if conflict exists within the exact project scope
     let finalFolderName = cleanName;
     if (existingFolders && existingFolders.length > 0) {
       let suffix = 1;
@@ -214,11 +215,11 @@ class KnowledgeExchangeService {
         const collision = await dbOrConn.query(
           `SELECT id FROM note_folders 
            WHERE user_id = ? 
-             AND (project_id = ? OR project_id IS NULL)
+             AND (project_id <=> ?)
              AND (parent_folder_id <=> ?)
              AND LOWER(name) = LOWER(?)
            LIMIT 1`,
-          [userId, targetProjectId, parentDbId, candidate]
+          [userId, normalizedProjectId, parentDbId, candidate]
         );
         if (!collision || collision.length === 0) {
           finalFolderName = candidate;
@@ -231,7 +232,7 @@ class KnowledgeExchangeService {
     const fIns = await dbOrConn.query(
       `INSERT INTO note_folders (user_id, project_id, parent_folder_id, name, sort_order)
        VALUES (?, ?, ?, ?, ?)`,
-      [userId, targetProjectId, parentDbId, finalFolderName, sortOrder]
+      [userId, normalizedProjectId, parentDbId, finalFolderName, sortOrder]
     );
     const folderDbId = fIns.insertId || (fIns[0] && fIns[0].insertId);
 
@@ -325,7 +326,27 @@ class KnowledgeExchangeService {
     const zipBuffer = fs.readFileSync(zipFilePath);
     const computedSha256 = crypto.createHash('sha256').update(zipBuffer).digest('hex');
 
-    if (packageSha256 && packageSha256.toLowerCase() !== computedSha256.toLowerCase()) {
+    let hashMatches = false;
+    if (!packageSha256) {
+      hashMatches = true;
+    } else if (packageSha256.toLowerCase() === computedSha256.toLowerCase()) {
+      hashMatches = true;
+    } else {
+      // Support matching canonical content hash if client supplied it for FKF
+      try {
+        const rawContent = zipBuffer.toString('utf8');
+        const parsedDoc = JSON.parse(rawContent);
+        if (parsedDoc && (parsedDoc.format === 'flowden-knowledge-format' || parsedDoc.format === 'flowden-knowledge-package')) {
+          const { computeDeterministicSha256 } = require('../utils/fkfCanonicalParser');
+          const canonicalHash = computeDeterministicSha256(parsedDoc);
+          if (canonicalHash && canonicalHash.toLowerCase() === packageSha256.toLowerCase()) {
+            hashMatches = true;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!hashMatches) {
       await SecurityService.logSecurityEvent({
         userId,
         eventType: 'EXCHANGE_COMMIT_HASH_MISMATCH',
@@ -557,6 +578,29 @@ class KnowledgeExchangeService {
 
         const err = new Error('You do not have permission to import into the requested destination project.');
         err.code = 'PROJECT_ACCESS_DENIED';
+        err.status = 403;
+        throw err;
+      }
+
+      const hasWrite = await Project.hasWriteAccess(targetProjectId, userId);
+      if (!hasWrite) {
+        await SecurityService.logSecurityEvent({
+          userId,
+          eventType: 'EXCHANGE_COMMIT_FORBIDDEN_PROJECT',
+          severity: 'warning',
+          ip,
+          targetType: 'project',
+          targetId: String(targetProjectId)
+        });
+        await db.query(
+          `UPDATE knowledge_import_jobs SET state = 'rolled_back', error_details_json = ? WHERE operation_id = ?`,
+          [JSON.stringify({ error: 'Write permission required to import into project' }), operationId]
+        );
+        removeFileIfExists(journalPath);
+        removeDirIfExists(stageDir);
+
+        const err = new Error('You do not have write permission to import into the requested destination project. Only owners and editors can import.');
+        err.code = 'PROJECT_FORBIDDEN';
         err.status = 403;
         throw err;
       }
@@ -919,9 +963,9 @@ class KnowledgeExchangeService {
         [targetProjectId, overviewNoteId, userId]
       );
       await conn.query(
-        `INSERT INTO note_versions (note_id, user_id, title, content_markdown, content, version_number)
-         VALUES (?, ?, ?, ?, ?, 1)`,
-        [overviewNoteId, userId, overviewTitle, overviewContent, overviewContent]
+        `INSERT INTO note_versions (note_id, user_id, created_by, title, content_markdown, content, version_number)
+         VALUES (?, ?, ?, ?, ?, ?, 1)`,
+        [overviewNoteId, userId, userId, overviewTitle, overviewContent, overviewContent]
       );
 
       // 6. Notes (manifest.entities.notes)
@@ -987,9 +1031,9 @@ class KnowledgeExchangeService {
             [targetProjectId, noteDbId, userId]
           );
           await conn.query(
-            `INSERT INTO note_versions (note_id, user_id, title, content_markdown, content, version_number)
-             VALUES (?, ?, ?, ?, ?, 1)`,
-            [noteDbId, userId, finalNoteTitle, cleanNoteMd, cleanNoteMd]
+            `INSERT INTO note_versions (note_id, user_id, created_by, title, content_markdown, content, version_number)
+             VALUES (?, ?, ?, ?, ?, ?, 1)`,
+            [noteDbId, userId, userId, finalNoteTitle, cleanNoteMd, cleanNoteMd]
           );
 
           // Combined Tags from metadata and frontmatter

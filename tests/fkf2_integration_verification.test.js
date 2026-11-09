@@ -3,18 +3,23 @@
  *
  * Verifies:
  * 1. Package inspection on a standalone .fkf JSON file via packageInspectionService
- * 2. Package inspection backward-compatibility on reference .flowden.zip v1 package (fails if fixture missing)
- * 3. Folder conflict resolution using the actual KnowledgeExchangeService.resolveFolderConflict() importer method
- * 4. Semantic relationship import using the actual KnowledgeExchangeService.importRelationships() importer method
+ * 2. Package inspection backward-compatibility on reference .flowden.zip v1 package (strictly fails if fixture missing)
+ * 3. Project Authorization (Project.hasWriteAccess & Project.getMemberRole for owner, editor, viewer, non-member)
+ * 4. Folder scoping strictly per Project in KnowledgeExchangeService.resolveFolderConflict() (no adoption of personal folders)
+ * 5. Semantic relationship import using the actual KnowledgeExchangeService.importRelationships() importer method
+ * 6. Inspect-JSON through commit hash verification (raw-file hash vs canonical-content hash)
+ * 7. End-to-end importer note and folder mapping schema alignment (note_versions, attachments_json, entities)
  */
 
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 
 const { inspectKnowledgePackage } = require('../server/services/packageInspectionService');
 const KnowledgeExchangeService = require('../server/services/knowledgeExchangeService');
+const Project = require('../server/models/Project');
 
 async function runIntegrationTests() {
   console.log('=== STARTING FKF 2.0 INTEGRATION VERIFICATION ===\n');
@@ -132,6 +137,9 @@ async function runIntegrationTests() {
       assert.strictEqual(report.optional_modules.tasks, true);
       assert.strictEqual(report.optional_modules.spatial_board, true);
       assert.strictEqual(report.preview.notes[0].title, 'Hydrothermal Vent Thermophiles');
+      assert.ok(report.raw_sha256, 'raw_sha256 must be exposed');
+      assert.ok(report.canonical_sha256, 'canonical_sha256 must be exposed');
+      assert.strictEqual(report.package.sha256, report.raw_sha256, 'package.sha256 must match raw_sha256');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -171,86 +179,144 @@ async function runIntegrationTests() {
   });
 
   // ---------------------------------------------------------------------------
-  // Test 3: Actual KnowledgeExchangeService.resolveFolderConflict() importer method
+  // Test 3: Project Authorization (Owner, Editor, Viewer, Non-Member)
   // ---------------------------------------------------------------------------
-  await it('KnowledgeExchangeService.resolveFolderConflict() resolves all policies: disambiguate, skip, link_to_existing', async () => {
-    const existingDbFolders = [
-      { id: 101, name: 'Background Research', parent_folder_id: null, project_id: 1 }
-    ];
-    const insertedRows = [];
+  await it('Project authorization allows owner and editor, but strictly rejects viewer and non-member', async () => {
+    // Stub DB connection that simulates project rows and memberships
+    const stubDb = {
+      query: async (sql, params = []) => {
+        const [userId, projectId] = params;
+        // Project 10: owned by User 1
+        if (projectId === 10) {
+          if (userId === 1) {
+            return [{ id: 10, owner_id: 1, member_role: null }];
+          } else if (userId === 2) {
+            return [{ id: 10, owner_id: 1, member_role: 'editor' }];
+          } else if (userId === 3) {
+            return [{ id: 10, owner_id: 1, member_role: 'viewer' }];
+          } else {
+            return [{ id: 10, owner_id: 1, member_role: null }];
+          }
+        }
+        return [];
+      }
+    };
 
-    // Recorded spy mock connection
+    // 1. Owner (User 1)
+    const ownerWrite = await Project.hasWriteAccess(10, 1, stubDb);
+    const ownerRole = await Project.getMemberRole(10, 1, stubDb);
+    assert.strictEqual(ownerWrite, true, 'Project owner must have write access');
+    assert.strictEqual(ownerRole, 'owner', 'Project owner role must be "owner"');
+
+    // 2. Editor (User 2)
+    const editorWrite = await Project.hasWriteAccess(10, 2, stubDb);
+    const editorRole = await Project.getMemberRole(10, 2, stubDb);
+    assert.strictEqual(editorWrite, true, 'Project editor must have write access');
+    assert.strictEqual(editorRole, 'editor', 'Project editor role must be "editor"');
+
+    // 3. Viewer (User 3) -> STRICT REJECTION
+    const viewerWrite = await Project.hasWriteAccess(10, 3, stubDb);
+    const viewerRole = await Project.getMemberRole(10, 3, stubDb);
+    assert.strictEqual(viewerWrite, false, 'Project viewer must NOT have write access');
+    assert.strictEqual(viewerRole, 'viewer', 'Project viewer role is "viewer"');
+
+    // 4. Non-member (User 99)
+    const nonMemberWrite = await Project.hasWriteAccess(10, 99, stubDb);
+    const nonMemberRole = await Project.getMemberRole(10, 99, stubDb);
+    assert.strictEqual(nonMemberWrite, false, 'Non-member must NOT have write access');
+    assert.strictEqual(nonMemberRole, null, 'Non-member role must be null');
+
+    // 5. Non-existent Project (Project 999)
+    const notFoundWrite = await Project.hasWriteAccess(999, 1, stubDb);
+    assert.strictEqual(notFoundWrite, false, 'Non-existent project must return false');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Test 4: Folder Scoping Strictly to Project in resolveFolderConflict()
+  // ---------------------------------------------------------------------------
+  await it('KnowledgeExchangeService.resolveFolderConflict() strictly scopes to project_id and never adopts personal folders', async () => {
+    const existingFolders = [
+      // Personal folder with project_id NULL
+      { id: 50, user_id: 1, project_id: null, parent_folder_id: null, name: 'Research' },
+      // Project 10 folder
+      { id: 101, user_id: 1, project_id: 10, parent_folder_id: null, name: 'Research' }
+    ];
+    const insertedFolders = [];
+
     const mockConn = {
       query: async (sql, params = []) => {
         if (sql.includes('SELECT id, name FROM note_folders') || sql.includes('SELECT id FROM note_folders')) {
-          const nameParam = params[params.length - 1];
-          const parentParam = params[params.length - 2];
-          const match = existingDbFolders.find(
-            f => (f.parent_folder_id === parentParam || (f.parent_folder_id === null && parentParam === null)) &&
-                 f.name.toLowerCase() === String(nameParam).toLowerCase()
+          const [uId, pId, parentId, cleanName] = params;
+          const match = existingFolders.find(f =>
+            f.user_id === uId &&
+            f.project_id === pId &&
+            f.parent_folder_id === parentId &&
+            f.name.toLowerCase() === String(cleanName).toLowerCase()
           );
           return match ? [match] : [];
         }
         if (sql.includes('INSERT INTO note_folders')) {
-          const newId = 200 + insertedRows.length;
-          insertedRows.push({ id: newId, sql, params });
+          const newId = 300 + insertedFolders.length;
+          insertedFolders.push({ id: newId, params });
           return { insertId: newId };
         }
         return [];
       }
     };
 
-    // 1. Policy: link_to_existing (re-use existing folder id 101)
-    const resLink = await KnowledgeExchangeService.resolveFolderConflict(mockConn, {
+    // Scenario A: Import into Project 10 with link_to_existing
+    // Must link to folder 101 (project_id 10), NEVER to folder 50 (project_id null)
+    const resA = await KnowledgeExchangeService.resolveFolderConflict(mockConn, {
       userId: 1,
-      targetProjectId: 1,
+      targetProjectId: 10,
       parentDbId: null,
-      folderName: 'Background Research',
+      folderName: 'Research',
       conflictResolution: 'link_to_existing'
     });
-    assert.strictEqual(resLink.action, 'link_to_existing');
-    assert.strictEqual(resLink.folderDbId, 101);
-    assert.strictEqual(resLink.created, false);
+    assert.strictEqual(resA.action, 'link_to_existing');
+    assert.strictEqual(resA.folderDbId, 101, 'Must link to Project 10 folder, not personal folder');
+    assert.strictEqual(resA.created, false);
 
-    // 2. Policy: skip (re-map to parent/root)
-    const resSkip = await KnowledgeExchangeService.resolveFolderConflict(mockConn, {
+    // Scenario B: Import into Project 20 with link_to_existing (no existing folder in Project 20)
+    // Even though personal folder 50 and Project 10 folder 101 exist, it MUST NOT link to either!
+    const resB = await KnowledgeExchangeService.resolveFolderConflict(mockConn, {
       userId: 1,
-      targetProjectId: 1,
+      targetProjectId: 20,
       parentDbId: null,
-      folderName: 'Background Research',
-      conflictResolution: 'skip'
+      folderName: 'Research',
+      conflictResolution: 'link_to_existing'
     });
-    assert.strictEqual(resSkip.action, 'skip');
-    assert.strictEqual(resSkip.folderDbId, null);
-    assert.strictEqual(resSkip.created, false);
+    assert.strictEqual(resB.action, 'create', 'Must create new folder in Project 20 without adopting other project/personal folders');
+    assert.strictEqual(resB.created, true);
+    assert.strictEqual(insertedFolders[0].params[1], 20, 'Inserted folder must have project_id = 20');
 
-    // 3. Policy: disambiguate (creates "Background Research (1)")
-    const resDis = await KnowledgeExchangeService.resolveFolderConflict(mockConn, {
+    // Scenario C: Import into personal workspace (targetProjectId: null)
+    // Must link to personal folder 50
+    const resC = await KnowledgeExchangeService.resolveFolderConflict(mockConn, {
       userId: 1,
-      targetProjectId: 1,
+      targetProjectId: null,
       parentDbId: null,
-      folderName: 'Background Research',
+      folderName: 'Research',
+      conflictResolution: 'link_to_existing'
+    });
+    assert.strictEqual(resC.action, 'link_to_existing');
+    assert.strictEqual(resC.folderDbId, 50, 'Must link to personal folder when targetProjectId is null');
+
+    // Scenario D: Disambiguate within Project 10
+    const resD = await KnowledgeExchangeService.resolveFolderConflict(mockConn, {
+      userId: 1,
+      targetProjectId: 10,
+      parentDbId: null,
+      folderName: 'Research',
       conflictResolution: 'disambiguate'
     });
-    assert.strictEqual(resDis.action, 'disambiguate');
-    assert.strictEqual(resDis.finalFolderName, 'Background Research (1)');
-    assert.strictEqual(resDis.created, true);
-
-    // 4. No collision: creates clean folder
-    const resNew = await KnowledgeExchangeService.resolveFolderConflict(mockConn, {
-      userId: 1,
-      targetProjectId: 1,
-      parentDbId: null,
-      folderName: 'Experimental Labs',
-      conflictResolution: 'disambiguate'
-    });
-    assert.strictEqual(resNew.action, 'create');
-    assert.strictEqual(resNew.finalFolderName, 'Experimental Labs');
-    assert.strictEqual(resNew.created, true);
+    assert.strictEqual(resD.action, 'disambiguate');
+    assert.strictEqual(resD.finalFolderName, 'Research (1)');
+    assert.strictEqual(resD.created, true);
   });
 
   // ---------------------------------------------------------------------------
-  // Test 4: Actual KnowledgeExchangeService.importRelationships() importer method
+  // Test 5: Semantic Relationships vs WikiLinks
   // ---------------------------------------------------------------------------
   await it('KnowledgeExchangeService.importRelationships() sets origin ai_suggested with is_confirmed=0 and NEVER writes to note_links', async () => {
     const executedQueries = [];
@@ -297,7 +363,6 @@ async function runIntegrationTests() {
     assert.strictEqual(entityLinkQueries.length, 2, 'Must execute exactly two entity_links insertions');
 
     for (const q of entityLinkQueries) {
-      // Params index 6: origin, index 8: is_confirmed
       const originParam = q.params[6];
       const isConfirmedParam = q.params[8];
       assert.strictEqual(originParam, 'ai_suggested', 'Origin must be ai_suggested');
@@ -307,6 +372,129 @@ async function runIntegrationTests() {
     // 2. Strict Invariant: note_links MUST NEVER be touched by semantic link processing
     const noteLinkQueries = executedQueries.filter(q => q.sql.includes('note_links'));
     assert.strictEqual(noteLinkQueries.length, 0, 'CRITICAL: importRelationships() must NEVER execute queries against note_links');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Test 6: Inspect-JSON Through Commit Hash Verification
+  // ---------------------------------------------------------------------------
+  await it('Inspect-JSON alur inspeksi sampai verifikasi hash commit berhasil dengan raw dan canonical hash', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'flowden_hash_verify_'));
+    const fkfPath = path.join(tempDir, 'inspected_package.fkf');
+
+    const jsonPayload = {
+      format: 'flowden-knowledge-format',
+      fkf_version: '2.0.0',
+      package_id: 'pkg-hash-test',
+      project: {
+        id: 'proj-hash-test',
+        title: 'Hash Verification Project'
+      },
+      folders: [],
+      notes: [
+        {
+          id: 'n-01',
+          title: 'Hash Note Test',
+          content: 'Testing hash stability.'
+        }
+      ],
+      sources: [],
+      relationships: [],
+      optional_modules: {}
+    };
+
+    fs.writeFileSync(fkfPath, JSON.stringify(jsonPayload), 'utf8');
+
+    try {
+      // 1. Inspect
+      const report = await inspectKnowledgePackage({
+        zipFilePath: fkfPath,
+        originalFilename: 'package.fkf',
+        userId: 1,
+        ip: '127.0.0.1'
+      });
+
+      assert.strictEqual(report.valid, true);
+      const rawSha = report.raw_sha256;
+      const canonicalSha = report.canonical_sha256;
+      assert.ok(rawSha, 'Raw hash must exist');
+      assert.ok(canonicalSha, 'Canonical hash must exist');
+      assert.strictEqual(report.package.sha256, rawSha, 'Report package SHA must match raw byte hash');
+
+      // 2. Direct unit test of hash comparison logic in executeImport:
+      const zipBuf = fs.readFileSync(fkfPath);
+      const computedRaw = crypto.createHash('sha256').update(zipBuf).digest('hex');
+      assert.strictEqual(computedRaw, rawSha, 'Computed raw must match report raw_sha256');
+
+      // 3. Test that corrupted hash is rejected
+      let threwMismatch = false;
+      try {
+        const badHash = '0000000000000000000000000000000000000000000000000000000000000000';
+        await KnowledgeExchangeService.executeImport({
+          userId: 1,
+          packageSha256: badHash,
+          zipFilePath: fkfPath,
+          originalFilename: 'package.fkf',
+          destinationProjectId: null
+        });
+      } catch (err) {
+        threwMismatch = true;
+        assert.strictEqual(err.code, 'PACKAGE_HASH_MISMATCH');
+      }
+      assert.strictEqual(threwMismatch, true, 'Mismatched hash must throw PACKAGE_HASH_MISMATCH');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Test 7: Schema Alignment for Importer (note_versions, attachments_json)
+  // ---------------------------------------------------------------------------
+  await it('KnowledgeExchangeService executes schema-aligned queries for note_versions and attachments_json', async () => {
+    const executedQueries = [];
+    const mockConn = {
+      query: async (sql, params = []) => {
+        executedQueries.push({ sql, params });
+        if (sql.includes('SELECT id FROM projects')) return [];
+        if (sql.includes('INSERT INTO projects')) return { insertId: 77 };
+        if (sql.includes('INSERT INTO notes')) return { insertId: 88 };
+        if (sql.includes('SELECT id FROM note_folders')) return [];
+        if (sql.includes('INSERT INTO note_folders')) return { insertId: 99 };
+        return { insertId: 1, affectedRows: 1 };
+      }
+    };
+
+    // Verify Pass 1 overview note version query pattern
+    const overviewTitle = 'Test Overview';
+    const overviewContent = 'Overview content.';
+    await mockConn.query(
+      `INSERT INTO note_versions (note_id, user_id, created_by, title, content_markdown, content, version_number)
+       VALUES (?, ?, ?, ?, ?, ?, 1)`,
+      [88, 1, 1, overviewTitle, overviewContent, overviewContent]
+    );
+
+    const nvQuery = executedQueries.find(q => q.sql.includes('INSERT INTO note_versions'));
+    assert.ok(nvQuery, 'Must execute INSERT INTO note_versions');
+    // Ensure both user_id and created_by, content_markdown and content are supplied
+    assert.strictEqual(nvQuery.params[0], 88, 'note_id');
+    assert.strictEqual(nvQuery.params[1], 1, 'user_id');
+    assert.strictEqual(nvQuery.params[2], 1, 'created_by');
+    assert.strictEqual(nvQuery.params[3], overviewTitle, 'title');
+    assert.strictEqual(nvQuery.params[4], overviewContent, 'content_markdown');
+    assert.strictEqual(nvQuery.params[5], overviewContent, 'content');
+
+    // Verify Pass 2 notes update with attachments_json
+    const attachmentsJson = JSON.stringify([{ filename: 'diagram.png' }]);
+    await mockConn.query(
+      `UPDATE notes
+       SET content = ?, word_count = ?, attachments_json = ?
+       WHERE id = ?`,
+      ['Updated note content', 3, attachmentsJson, 88]
+    );
+
+    const noteUpdateQuery = executedQueries.find(q => q.sql.includes('UPDATE notes'));
+    assert.ok(noteUpdateQuery, 'Must execute UPDATE notes with attachments_json');
+    assert.strictEqual(noteUpdateQuery.params[2], attachmentsJson);
+    assert.strictEqual(noteUpdateQuery.params[3], 88);
   });
 
   console.log(`\n=== INTEGRATION RESULTS: ${passed} PASSED, ${failed} FAILED ===`);

@@ -64,35 +64,32 @@ async function runTests() {
     assert.strictEqual(typeof pdfModule.PDFParse, 'function', 'pdfModule.PDFParse is a constructor');
   });
 
-  await itAsync('pdf-parse instantiate with Uint8Array and getText()', async () => {
-    const { PDFParse } = require('pdf-parse');
-    // Minimal valid PDF binary
-    const minimalPdf = Buffer.from(
-      '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 300 144]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000111 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF'
-    );
-    const parser = new PDFParse(new Uint8Array(minimalPdf));
-    const result = await parser.getText();
-    const text = typeof result === 'string' ? result : (result && result.text ? result.text : '');
+  await itAsync('Production extractDocumentText extracts real text from PDF fixture', async () => {
+    const { extractDocumentText } = require('../server/routes/research');
+    const fixturePath = path.resolve(__dirname, 'fixtures', 'sample_research.pdf');
+    assert.ok(fs.existsSync(fixturePath), 'PDF fixture must exist');
+
+    const text = await extractDocumentText(fixturePath, '.pdf');
     assert.strictEqual(typeof text, 'string');
-    assert.ok(text.includes('1 of 1'), 'Extracted page marker text');
+    assert.ok(
+      text.includes('Flowden Knowledge Base Real Text Extraction Test'),
+      `Extracted text must contain fixture phrase. Received: "${text}"`
+    );
   });
 
-  await itAsync('Corrupted PDF extraction returns empty string without error injection', async () => {
-    // Simulated research.js extractDocumentText behavior
-    async function extractDocumentTextSim(buffer) {
-      try {
-        const { PDFParse } = require('pdf-parse');
-        const parser = new PDFParse(new Uint8Array(buffer));
-        const text = await parser.getText();
-        return text || '';
-      } catch (err) {
-        return ''; // Must return empty string, never error message
-      }
+  await itAsync('Production extractDocumentText on corrupted PDF returns empty string without error injection', async () => {
+    const { extractDocumentText } = require('../server/routes/research');
+    const tempCorruptPath = path.resolve(__dirname, 'fixtures', `temp_corrupt_${Date.now()}.pdf`);
+    fs.writeFileSync(tempCorruptPath, 'CORRUPTED_NON_PDF_BINARY_PAYLOAD_TEST', 'utf8');
+
+    try {
+      const result = await extractDocumentText(tempCorruptPath, '.pdf');
+      assert.strictEqual(result, '', 'Corrupted PDF extraction must return empty string');
+      assert.ok(!result.includes('Unavailable'), 'Must not inject error message as text');
+      assert.ok(!result.includes('Error'), 'Must not inject error message as text');
+    } finally {
+      try { fs.unlinkSync(tempCorruptPath); } catch (_) {}
     }
-    const corruptedBuffer = Buffer.from('NOT_A_REAL_PDF_DATA_CORRUPTED');
-    const result = await extractDocumentTextSim(corruptedBuffer);
-    assert.strictEqual(result, '', 'Corrupted PDF extraction must return empty string');
-    assert.ok(!result.includes('Unavailable'), 'Must not inject error message as text');
   });
 
   // ---------------------------------------------------------------------------
@@ -390,13 +387,24 @@ async function runTests() {
   });
 
   // ---------------------------------------------------------------------------
-  // Test Group 7: Migration 007 Verification
+  // Test Group 7: Migration 007 & 008 Verification
   // ---------------------------------------------------------------------------
-  console.log('\n--- Test Group 7: Migration 007 Structure & Export ---');
+  console.log('\n--- Test Group 7: Migration 007 & 008 Structure & Export ---');
 
   it('Migration 007 exports up(conn) function and matches runner regex', () => {
     const migPath = path.resolve(__dirname, '..', 'server', 'migrations', '007_note_folders_project_id.js');
     assert.ok(fs.existsSync(migPath), 'Migration 007 file exists');
+
+    const filename = path.basename(migPath);
+    assert.ok(/^(\d+)_(.+)\.(js|sql)$/.test(filename), 'Filename matches migration runner regex');
+
+    const mig = require(migPath);
+    assert.strictEqual(typeof mig.up, 'function', 'Exports up(conn) function');
+  });
+
+  it('Migration 008 exports up(conn) function and matches runner regex', () => {
+    const migPath = path.resolve(__dirname, '..', 'server', 'migrations', '008_formalize_importer_schema.js');
+    assert.ok(fs.existsSync(migPath), 'Migration 008 file exists');
 
     const filename = path.basename(migPath);
     assert.ok(/^(\d+)_(.+)\.(js|sql)$/.test(filename), 'Filename matches migration runner regex');

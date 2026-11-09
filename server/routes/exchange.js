@@ -158,6 +158,14 @@ router.post('/inspect', (req, res) => {
             errors: [{ code: 'PROJECT_ACCESS_DENIED', message: 'Unauthorized destination project.' }]
           });
         }
+        const hasWrite = await Project.hasWriteAccess(destinationProjectId, req.user.id);
+        if (!hasWrite) {
+          return res.status(403).json({
+            valid: false,
+            error: 'You do not have permission to import into this project. Only project owners and editors can import content.',
+            errors: [{ code: 'PROJECT_FORBIDDEN', message: 'Import requires owner or editor permissions.' }]
+          });
+        }
       }
 
       const report = await inspectKnowledgePackage({
@@ -325,6 +333,14 @@ router.post('/inspect-json', express.json({ limit: '10mb' }), async (req, res) =
           valid: false,
           error: 'You do not have access to the specified destination project.',
           errors: [{ code: 'PROJECT_ACCESS_DENIED', message: 'Unauthorized destination project.' }]
+        });
+      }
+      const hasWrite = await Project.hasWriteAccess(destinationProjectId, req.user.id);
+      if (!hasWrite) {
+        return res.status(403).json({
+          valid: false,
+          error: 'You do not have permission to import into this project. Only project owners and editors can import content.',
+          errors: [{ code: 'PROJECT_FORBIDDEN', message: 'Import requires owner or editor permissions.' }]
         });
       }
     }
@@ -602,6 +618,14 @@ router.post('/commit', (req, res) => {
             code: 'PROJECT_ACCESS_DENIED'
           });
         }
+        const hasWrite = await Project.hasWriteAccess(finalDestinationProjectId, req.user.id);
+        if (!hasWrite) {
+          return res.status(403).json({
+            success: false,
+            error: 'You do not have permission to import into this project. Only project owners and editors can import content.',
+            code: 'PROJECT_FORBIDDEN'
+          });
+        }
       }
 
       // 8. Package Bytes & SHA-256 Binding
@@ -611,7 +635,16 @@ router.post('/commit', (req, res) => {
         // Uploaded file provided: verify SHA-256 matches inspected ticket
         const uploadedBuf = fs.readFileSync(uploadedPath);
         const uploadedSha = crypto.createHash('sha256').update(uploadedBuf).digest('hex');
-        if (uploadedSha !== ticket.package_sha256) {
+        let hashOk = (uploadedSha.toLowerCase() === ticket.package_sha256.toLowerCase());
+        if (!hashOk) {
+          try {
+            const reportObj = JSON.parse(ticket.report_json || '{}');
+            if (reportObj.canonical_sha256 && reportObj.canonical_sha256.toLowerCase() === uploadedSha.toLowerCase()) {
+              hashOk = true;
+            }
+          } catch (_) {}
+        }
+        if (!hashOk) {
           return res.status(422).json({
             success: false,
             error: 'Uploaded package bytes do not match the inspected package hash.',
@@ -633,12 +666,23 @@ router.post('/commit', (req, res) => {
 
       // Also verify client-supplied package_sha256 if present
       const reqSha = req.body.package_sha256 || req.headers['x-flowden-package-sha256'];
-      if (reqSha && reqSha !== ticket.package_sha256) {
-        return res.status(422).json({
-          success: false,
-          error: 'Client-supplied package SHA-256 does not match inspected token package hash.',
-          code: 'PACKAGE_HASH_MISMATCH'
-        });
+      if (reqSha) {
+        let clientShaOk = (reqSha.toLowerCase() === ticket.package_sha256.toLowerCase());
+        if (!clientShaOk) {
+          try {
+            const reportObj = JSON.parse(ticket.report_json || '{}');
+            if (reportObj.canonical_sha256 && reportObj.canonical_sha256.toLowerCase() === reqSha.toLowerCase()) {
+              clientShaOk = true;
+            }
+          } catch (_) {}
+        }
+        if (!clientShaOk) {
+          return res.status(422).json({
+            success: false,
+            error: 'Client-supplied package SHA-256 does not match inspected token package hash.',
+            code: 'PACKAGE_HASH_MISMATCH'
+          });
+        }
       }
 
       // 9. Atomic Consumption of Inspection Token
