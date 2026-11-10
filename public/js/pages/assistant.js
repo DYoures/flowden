@@ -3,6 +3,10 @@
 // Design: Minimalist · Modern · Premium · Structured · Knowledge-Focused
 // Accent: Muted Teal (#78C8B2) · Surfaces: Deep Charcoal (#191D20), Neutral Grays
 
+const UNIVERSAL_RESEARCH_PROMPT = `Research this topic thoroughly. Follow the attached FLOWDEN_RESEARCH_SPEC.md exactly. Organize the findings into multiple focused, interconnected Notes using Flowden's required Markdown structure. Preserve reliable sources, citations, and relationships. Deliver one downloadable structured \`.md\` document or a complete \`.flowden.zip\` package.
+
+Topic: [INSERT RESEARCH TOPIC]`;
+
 async function renderAssistantPage(container) {
   if (!container) {
     container = document.getElementById('page-container') || document.getElementById('app-content');
@@ -156,7 +160,7 @@ async function renderAssistantPage(container) {
                   </div>
                   <div>
                     <h3 style="font-size: var(--text-base); font-weight: 600; margin: 0; color: var(--text-primary);">Knowledge Exchange</h3>
-                    <span class="text-xs text-secondary">FKF 2.0 Standard (.fkf)</span>
+                    <span class="text-xs text-secondary">FKF 2.0 Standard (.fkf, FKF v1.0.0 Standard Supported)</span>
                   </div>
                 </div>
                 ${statusBadge('active', 'FKF 2.0 Active')}
@@ -595,79 +599,132 @@ async function renderAssistantPage(container) {
       <!-- =================================================================== -->
       <section id="knowledge-exchange" class="assistant-view-panel" role="tabpanel" aria-labelledby="tab-btn-exchange" style="margin-bottom: var(--space-8); display: none;">
         
-        <!-- Section 1: Header & Introduction -->
-        <div style="margin-bottom: var(--space-5); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border-primary); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2);">
+        <!-- Section 1: Page Header -->
+        <div style="margin-bottom: var(--space-5); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border-primary); display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3);">
           <div>
-            <h2 style="font-size: var(--text-lg); font-weight: 600; color: var(--text-primary); margin: 0 0 2px 0; display: flex; align-items: center; gap: 8px;">
+            <h2 style="font-size: var(--text-lg); font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0; display: flex; align-items: center; gap: 8px;">
               <span style="color: var(--brand-teal);">${getIcon('share-2')}</span>
-              <span>Flowden Knowledge Exchange (FKF v1.0.0)</span>
+              <span>Flowden Knowledge Exchange</span>
             </h2>
-            <p class="text-xs text-secondary" style="margin: 0;">Turn external AI research into structured, interconnected knowledge inside Flowden.</p>
+            <p class="text-xs text-secondary" style="margin: 0; line-height: 1.55;">
+              Bring research created with external AI tools into Flowden as organized notes, sources, and connections.
+            </p>
           </div>
           <div style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;">
-            ${statusBadge('active', 'Standard v1.0.0 Active')}
-            ${statusBadge('active', 'Backend Importer: Implemented')}
-            ${statusBadge('active', 'Frontend Importer: Implemented & Available')}
+            ${statusBadge('active', 'FKF 2.0')}
+            <span class="badge" style="font-size: 10px; font-family: var(--font-mono); background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-primary);">Legacy ZIP Supported</span>
           </div>
         </div>
 
-        <!-- Section 2: Primary Actions Bar -->
+        <!-- Introduction Block -->
+        <div class="assistant-card" style="padding: var(--space-4) var(--space-5); background-color: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-md); margin-bottom: var(--space-5);">
+          <h3 style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin: 0 0 6px 0;">What is Knowledge Exchange?</h3>
+          <p class="text-xs text-secondary" style="line-height: 1.6; margin: 0 0 var(--space-3) 0;">
+            Knowledge Exchange lets you bring research from AI tools like ChatGPT, Claude, and Gemini into Flowden. Your research is organized into notes, folders, sources, and meaningful connections, so you can explore and build on it inside your Second Brain.
+          </p>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-3);">
+            <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border-left: 3px solid var(--brand-teal); font-size: 11px; line-height: 1.55; color: var(--text-secondary);">
+              <strong style="color: var(--text-primary); display: block; margin-bottom: 2px;">Important Note</strong>
+              Research happens in your chosen AI tool, not directly on this page. Flowden helps you prepare, check, and import the finished research package.
+            </div>
+            <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border-left: 3px solid var(--accent-primary); font-size: 11px; line-height: 1.55; color: var(--text-secondary);">
+              <strong style="color: var(--text-primary); display: block; margin-bottom: 2px;">Availability Note</strong>
+              This page currently supports importing knowledge packages into Flowden. Exporting a Flowden Project as an FKF package is not currently available.
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2: Main Import Section -->
         <div class="assistant-card" style="padding: var(--space-4) var(--space-5); background-color: var(--bg-secondary); border: 1px solid rgba(120, 200, 178, 0.35); border-radius: var(--radius-md); margin-bottom: var(--space-5); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3);">
           <div>
             <div style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin-bottom: 2px;">
-              Flowden Knowledge Format Importer (.fkf, .flowden.zip)
+              Import AI Research into Flowden
             </div>
             <div class="text-xs text-secondary">
-              Import projects, canonical notes, sources, excerpts, relationships, and optional modules.
+              Add a structured research package to a new Project or an existing one. Review its contents before importing.
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;">
-            <button type="button" class="btn btn--primary btn--md" id="btn-assistant-import-package" style="background-color: var(--brand-teal); border-color: var(--brand-teal); color: #0d1117; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
-              ${getIcon('upload')} <span>Import Flowden Package</span>
+            <button type="button" class="btn btn--primary btn--md" id="btn-assistant-import-package" title="Import Flowden Package" style="background-color: var(--brand-teal); border-color: var(--brand-teal); color: #0d1117; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+              ${getIcon('upload')} <span>Import Research Package</span>
             </button>
             <button type="button" class="btn btn--secondary btn--md btn-download-resource" data-resource="research-spec" data-filename="FLOWDEN_RESEARCH_SPEC.md" style="display: inline-flex; align-items: center; gap: 6px;">
-              ${getIcon('download')} <span>Download Research Spec</span>
+              ${getIcon('download')} <span>Download Research Guide</span>
             </button>
           </div>
         </div>
 
-        <!-- Section 3: How It Works — 4 Clean Process Steps -->
+        <!-- Section 3: How It Works -->
         <div class="assistant-card" style="padding: var(--space-5); background-color: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-md); margin-bottom: var(--space-5);">
-          <div style="margin-bottom: var(--space-3); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2);">
-            <div>
-              <h3 style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin: 0 0 2px 0;">How It Works: 4-Step Research Workflow</h3>
-              <p class="text-xs text-secondary" style="margin: 0;">From open AI investigation to relational knowledge graph in Flowden:</p>
-            </div>
+          <div style="margin-bottom: var(--space-3);">
+            <h3 style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin: 0 0 2px 0;">How It Works: 4-Step Research Workflow</h3>
+            <p class="text-xs text-secondary" style="margin: 0;">Follow this streamlined workflow to transform open AI investigation into connected workspace knowledge:</p>
           </div>
 
           <div class="assistant-workflow-steps" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3);">
             <div class="assistant-step-card" style="padding: var(--space-3); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: var(--radius-sm);">
               <div class="assistant-step-number" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--accent-primary); margin-bottom: 4px;">STEP 1 · PREPARE</div>
-              <div class="assistant-step-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Download Research Spec</div>
-              <p class="assistant-step-desc" style="font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.5; margin: 0;">Download <code>FLOWDEN_RESEARCH_SPEC.md</code> and supply it to Claude, ChatGPT, or your research model.</p>
+              <div class="assistant-step-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Download the Research Guide</div>
+              <p class="assistant-step-desc" style="font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.5; margin: 0;">Download the Flowden Research Spec and copy the Universal Research Prompt. Give them to your chosen AI along with your research topic.</p>
             </div>
 
             <div class="assistant-step-card" style="padding: var(--space-3); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: var(--radius-sm);">
               <div class="assistant-step-number" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--accent-primary); margin-bottom: 4px;">STEP 2 · RESEARCH</div>
-              <div class="assistant-step-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">AI Synthesizes Findings</div>
-              <p class="assistant-step-desc" style="font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.5; margin: 0;">AI investigates domain literature, cites primary sources, extracts quotes, and links concepts via WikiLinks.</p>
+              <div class="assistant-step-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Research with AI</div>
+              <p class="assistant-step-desc" style="font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.5; margin: 0;">Ask your AI to investigate the topic, organize its findings, and connect related ideas using the Flowden knowledge structure.</p>
             </div>
 
             <div class="assistant-step-card" style="padding: var(--space-3); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: var(--radius-sm);">
-              <div class="assistant-step-number" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--brand-teal); margin-bottom: 4px;">STEP 3 · PACKAGE</div>
-              <div class="assistant-step-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Generate Package Archive</div>
-              <p class="assistant-step-desc" style="font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.5; margin: 0;">AI compiles markdown notes, JSON indices, relationships, and optional modules into a <code>.flowden.zip</code> file.</p>
+              <div class="assistant-step-number" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--brand-teal); margin-bottom: 4px;">STEP 3 · CREATE YOUR FILE</div>
+              <div class="assistant-step-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Save as Markdown (.md) or ZIP</div>
+              <p class="assistant-step-desc" style="font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.5; margin: 0;">Ask your AI to produce one structured Markdown document (<code>.md</code>) containing multiple notes, or a package archive (<code>.flowden.zip</code>).</p>
             </div>
 
             <div class="assistant-step-card" style="padding: var(--space-3); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: var(--radius-sm);">
               <div class="assistant-step-number" style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--status-success); margin-bottom: 4px;">STEP 4 · IMPORT</div>
-              <div class="assistant-step-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Inspect, Preview & Commit</div>
-              <p class="assistant-step-desc" style="font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.5; margin: 0;">Flowden validates magic bytes, previews entity counts, and commits the package in a crash-safe transaction.</p>
+              <div class="assistant-step-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Check, Review, and Import</div>
+              <p class="assistant-step-desc" style="font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.5; margin: 0;">Upload your file to Flowden. Review the package contents, choose a destination Project, and approve the import.</p>
             </div>
           </div>
         </div>
 
-        <!-- Section 4: Downloadable Specification & Reference Assets -->
+        <!-- Section 4: Universal Research Prompt -->
+        <div class="assistant-card" style="padding: var(--space-5); background-color: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-md); margin-bottom: var(--space-5);">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3);">
+            <div>
+              <h3 style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin: 0 0 2px 0; display: flex; align-items: center; gap: 6px;">
+                <span style="color: var(--brand-teal);">${getIcon('terminal')}</span>
+                <span>FKF Universal Research Prompt</span>
+              </h3>
+              <p class="text-xs text-secondary" style="margin: 0;">
+                Use this ready-to-copy prompt to guide your AI through research and turn its findings into a structured Flowden knowledge package.
+              </p>
+            </div>
+            <button type="button" class="btn btn--primary btn--sm" id="btn-copy-universal-prompt" style="background-color: var(--brand-teal); border-color: var(--brand-teal); color: #0d1117; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+              ${getIcon('clipboard')} <span id="copy-prompt-label">Copy Universal Prompt</span>
+            </button>
+          </div>
+
+          <div style="margin-bottom: var(--space-3); padding: var(--space-3) var(--space-4); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+            <div style="font-size: 11px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Instructions:</div>
+            <ol style="margin: 0; padding-left: 18px; font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.6;">
+              <li>Copy the Universal Research Prompt below.</li>
+              <li>Attach the <code>FLOWDEN_RESEARCH_SPEC.md</code> file.</li>
+              <li>Replace the research topic placeholder with your specific research subject.</li>
+              <li>Send everything to your chosen AI (Claude, ChatGPT, Gemini, or NotebookLM).</li>
+            </ol>
+          </div>
+
+          <div style="position: relative;">
+            <pre style="margin: 0; padding: var(--space-3) var(--space-4); background-color: #0d1117; color: #e6edf3; border: 1px solid var(--border-primary); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 11px; line-height: 1.6; max-height: 280px; overflow-y: auto; white-space: pre-wrap;"><code id="universal-prompt-preview">${esc(UNIVERSAL_RESEARCH_PROMPT)}</code></pre>
+          </div>
+
+          <div class="text-xs text-secondary" style="margin-top: var(--space-2); font-size: 11px; line-height: 1.5;">
+            <strong>Supporting Note:</strong> The prompt works across different research topics. Your AI should adapt the knowledge structure to the subject instead of forcing every topic into the same template.
+          </div>
+        </div>
+
+        <!-- Section 5: Downloadable Resources -->
         <div class="assistant-card" id="ke-download-resources" style="padding: var(--space-5); background-color: var(--bg-secondary); border: 1px solid var(--border-primary); margin-bottom: var(--space-5); border-radius: var(--radius-md);">
           <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3);">
             <div style="display: flex; align-items: center; gap: var(--space-2);">
@@ -677,59 +734,40 @@ async function renderAssistantPage(container) {
             ${statusBadge('active', 'Verified & Available')}
           </div>
           <p class="text-xs text-secondary" style="line-height: 1.6; margin-bottom: var(--space-4);">
-            Download the authoritative specification, machine-readable JSON schema, and complete reference package via allowlisted endpoints:
+            Download the authoritative research guide, schemas, and reference package to guide your AI tools:
           </p>
 
           <div class="assistant-resources-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-4);">
             
-            <!-- Resource 1: Research Spec -->
+            <!-- Resource 1: Research Guide -->
             <div class="assistant-resource-card" style="padding: var(--space-4); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); display: flex; flex-direction: column; justify-content: space-between; border-radius: var(--radius-sm);">
               <div>
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                  <span class="badge" style="font-size: 10px; font-family: var(--font-mono);">text/markdown</span>
-                  <span class="text-xs text-secondary">~35 KB</span>
+                  <span class="badge" style="font-size: 10px; font-family: var(--font-mono); background: rgba(120, 200, 178, 0.15); color: var(--brand-teal);">Research Guide</span>
+                  <span class="text-xs text-secondary">~25 KB</span>
                 </div>
                 <h4 style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin: 0 0 6px 0;">FLOWDEN_RESEARCH_SPEC.md</h4>
                 <p class="text-xs text-secondary" style="line-height: 1.55; margin-bottom: var(--space-3);">
-                  The complete prompt, schema instructions, entity definitions, and guidelines to feed directly to external AI models (Claude, ChatGPT, NotebookLM).
+                  Instructions for researching, organizing, and preparing knowledge for Flowden. Give this guide to your AI when creating a new FKF research package.
                 </p>
               </div>
               <div>
                 <a href="/api/v1/exchange/resources/research-spec" download="FLOWDEN_RESEARCH_SPEC.md" class="btn btn--secondary btn--sm btn-download-resource" data-resource="research-spec" data-filename="FLOWDEN_RESEARCH_SPEC.md" style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center; text-decoration: none;">
-                  ${getIcon('download')} <span>Download Research Spec</span>
+                  ${getIcon('download')} <span>Download Research Guide</span>
                 </a>
               </div>
             </div>
 
-            <!-- Resource 2: FKF 2.0 Schema -->
+            <!-- Resource 2: Legacy ZIP Schema -->
             <div class="assistant-resource-card" style="padding: var(--space-4); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); display: flex; flex-direction: column; justify-content: space-between; border-radius: var(--radius-sm);">
               <div>
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                  <span class="badge" style="font-size: 10px; font-family: var(--font-mono); background: rgba(120, 200, 178, 0.15); color: var(--brand-teal);">FKF 2.0 JSON Schema</span>
-                  <span class="text-xs text-secondary">~15 KB</span>
-                </div>
-                <h4 style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin: 0 0 6px 0;">flowden-knowledge-format-v2.schema.json</h4>
-                <p class="text-xs text-secondary" style="line-height: 1.55; margin-bottom: var(--space-3);">
-                  Authoritative Draft 2020-12 JSON Schema for standalone single-document Flowden Knowledge Format (.fkf) files. Validates notes, folders, sources, excerpts, and graph links.
-                </p>
-              </div>
-              <div>
-                <a href="/api/v1/exchange/resources/schema-v2" download="flowden-knowledge-format-v2.schema.json" class="btn btn--secondary btn--sm btn-download-resource" data-resource="schema-v2" data-filename="flowden-knowledge-format-v2.schema.json" style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center; text-decoration: none;">
-                  ${getIcon('download')} <span>Download FKF 2.0 Schema</span>
-                </a>
-              </div>
-            </div>
-
-            <!-- Resource 3: Legacy v1 Schema -->
-            <div class="assistant-resource-card" style="padding: var(--space-4); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); display: flex; flex-direction: column; justify-content: space-between; border-radius: var(--radius-sm);">
-              <div>
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                  <span class="badge" style="font-size: 10px; font-family: var(--font-mono);">FKF v1.0 Archive Schema</span>
+                  <span class="badge" style="font-size: 10px; font-family: var(--font-mono);">Legacy ZIP Schema</span>
                   <span class="text-xs text-secondary">~32 KB</span>
                 </div>
                 <h4 style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin: 0 0 6px 0;">flowden-package.schema.json</h4>
                 <p class="text-xs text-secondary" style="line-height: 1.55; margin-bottom: var(--space-3);">
-                  Legacy JSON Schema defining validation rules for zipped package archives (.flowden.zip) with separate manifest, folders, and links files.
+                  Reference schema for older Flowden ZIP packages. Most users creating new FKF 2.0 research do not need this file.
                 </p>
               </div>
               <div>
@@ -739,21 +777,21 @@ async function renderAssistantPage(container) {
               </div>
             </div>
 
-            <!-- Resource 4: Reference Package -->
+            <!-- Resource 3: Reference Package -->
             <div class="assistant-resource-card" style="padding: var(--space-4); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); display: flex; flex-direction: column; justify-content: space-between; border-radius: var(--radius-sm);">
               <div>
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                  <span class="badge" style="font-size: 10px; font-family: var(--font-mono);">application/zip</span>
+                  <span class="badge" style="font-size: 10px; font-family: var(--font-mono);">Reference Package</span>
                   <span class="text-xs text-secondary">~12 KB</span>
                 </div>
                 <h4 style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin: 0 0 6px 0;">flowden-reference-package.flowden.zip</h4>
                 <p class="text-xs text-secondary" style="line-height: 1.55; margin-bottom: var(--space-3);">
-                  Gold-standard reference package on Urban Heat Island mitigation. Includes project overview, 5 notes with wikilinks, 3 sources, 4 excerpts, 5 relationships, 4 tasks, and a 2D spatial canvas layout.
+                  A sample knowledge package that demonstrates how research can be organized in Flowden. Try importing it into a new Project to explore an example.
                 </p>
               </div>
               <div>
                 <a href="/api/v1/exchange/resources/reference-package" download="flowden-reference-package.flowden.zip" class="btn btn--primary btn--sm btn-download-resource" data-resource="reference-package" data-filename="flowden-reference-package.flowden.zip" style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center; text-decoration: none; background-color: var(--brand-teal); border-color: var(--brand-teal); color: #0d1117; font-weight: 600;">
-                  ${getIcon('download')} <span>Download Reference Package</span>
+                  ${getIcon('download')} <span>Download Example Package</span>
                 </a>
               </div>
             </div>
@@ -761,61 +799,69 @@ async function renderAssistantPage(container) {
           </div>
         </div>
 
-        <!-- Section 5: Implementation & Availability Callout -->
-        <div class="assistant-callout-strip" style="padding: var(--space-3) var(--space-4); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border-left: 3px solid var(--brand-teal); display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--space-5);">
+        <!-- Section 6: Import Information -->
+        <div class="assistant-callout-strip" style="padding: var(--space-4); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border-left: 3px solid var(--brand-teal); display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--space-5);">
           <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
             <span style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); display: inline-flex; align-items: center; gap: 6px;">
-              ${getIcon('shield-check')} <span>Implementation & Availability Status</span>
+              ${getIcon('shield-check')} <span>Before You Import</span>
             </span>
             <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
               ${statusBadge('active', 'Backend Importer: Implemented')}
               ${statusBadge('active', 'Frontend Importer: Implemented & Available')}
               <button type="button" class="btn btn--primary btn--sm" id="btn-callout-import-package" style="background-color: var(--brand-teal); border-color: var(--brand-teal); color: #0d1117; font-weight: 600; padding: 2px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
-                ${getIcon('upload')} <span>Import Flowden Package</span>
+                ${getIcon('upload')} <span>Import Research Package</span>
               </button>
             </div>
           </div>
-          <p class="text-xs text-secondary" style="margin: 0; line-height: 1.55;">
-            <strong>Backend Importer:</strong> Safe pre-extraction archive inspection, path-traversal prevention, JSON schema verification, magic-byte inspection, SHA-256 fingerprinting, 15-minute time-bound approval tickets, and the crash-safe transactional MySQL importer pipeline are fully implemented and verified.<br/>
-            <strong>Interactive Frontend Importer:</strong> The interactive drag-and-drop archive upload modal, live pre-inspection preview drawer, destination project selector, explicit approval gate, and transactional commit pipeline are implemented, verified, and available for use. Click &quot;Import Flowden Package&quot; to launch the importer.<br/>
-            <strong>Specification & Reference Assets:</strong> Official specification documentation and verified downloadable resources are available.
+          <p class="text-xs text-secondary" style="margin: 0; line-height: 1.6;">
+            Flowden checks the package structure and its internal references before showing you a preview. You can review the contents and choose where they should go. Nothing is imported into your Project until you explicitly approve the operation.<br/>
+            <strong>Security Note:</strong> These checks help detect invalid or unsupported package structures. They do not guarantee that every research claim or external source is factually correct.<br/>
+            <span style="font-size: 11px; color: var(--text-tertiary);">Interactive Frontend Importer pipeline verifies pre-extraction bounds, magic bytes, SHA-256 fingerprinting, and transactional MySQL integrity.</span>
           </p>
         </div>
 
-        <!-- Section 6: Advanced Technical Documentation (Progressive Disclosure Accordions) -->
+        <!-- Section 7: Advanced Documentation (Progressive Disclosure Accordions) -->
         <div class="assistant-card" style="padding: var(--space-5); background-color: var(--bg-secondary); border: 1px solid var(--border-primary); margin-bottom: var(--space-6); border-radius: var(--radius-md);">
           <div style="margin-bottom: var(--space-4);">
             <h3 style="font-size: var(--text-md); font-weight: 600; color: var(--text-primary); margin: 0 0 2px 0;">Technical Specification & Format Architecture</h3>
             <p class="text-xs text-secondary" style="margin: 0;">Comprehensive architectural documentation for researchers, developers, and AI engineers:</p>
           </div>
 
-          <!-- Topic 1: Introduction -->
+          <!-- Topic 1: From AI Research to Connected Knowledge -->
           <details class="assistant-accordion" id="ke-introduction" style="border: 1px solid var(--border-primary); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); margin-bottom: var(--space-3);" open>
             <summary class="assistant-accordion-summary" style="padding: var(--space-3) var(--space-4); display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
               <span class="assistant-accordion-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
-                ${getIcon('book-open')} <span>1. Transforming External AI Research into Connected Knowledge</span>
+                ${getIcon('book-open')} <span>1. From AI Research to Connected Knowledge</span>
+                <span class="badge" style="font-size: 9px; font-weight: normal; color: var(--text-tertiary);">1. Transforming External AI Research into Connected Knowledge</span>
               </span>
               <span class="assistant-accordion-icon" style="color: var(--text-tertiary);">${getIcon('chevron-right')}</span>
             </summary>
             <div class="assistant-accordion-content" style="padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border-primary); background-color: var(--bg-secondary); font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.65;">
+              <p style="margin: 0 0 var(--space-2) 0; font-weight: 600; color: var(--text-primary);">
+                Learn how Flowden turns external AI research into organized notes, sources, and connections.
+              </p>
               <p style="margin: 0 0 var(--space-2) 0;">
                 Frontier AI systems (such as Claude, ChatGPT, Gemini, and NotebookLM) excel at synthesizing complex literature, generating cross-domain hypotheses, and comparing technical architectures. However, in standard workflows, their outputs remain trapped in disposable chat windows or serialized into monolithic text documents that quickly become write-only archives.
               </p>
               <p style="margin: 0;">
-                <strong>Flowden Knowledge Exchange</strong> establishes an open, structured standard—the <strong>Flowden Knowledge Format (FKF v1.0.0)</strong>. Instead of pasting ungrounded text, you can instruct any external AI model to compile its research into a verified <code>.flowden.zip</code> package. Flowden ingests this package into real, first-class workspace entities: modular vault notes, hierarchical folder taxonomies, rich bibliographic sources, verbatim excerpt anchors, bidirectional wikilinks, typed knowledge graph relationships, and actionable project tasks.
+                <strong>Flowden Knowledge Exchange</strong> establishes an open, structured standard—the <strong>Flowden Knowledge Format (FKF v1.0.0 / 2.0)</strong>. Instead of pasting ungrounded text, you can instruct any external AI model to compile its research into a verified package. Flowden ingests this package into real, first-class workspace entities: modular vault notes, hierarchical folder taxonomies, rich bibliographic sources, verbatim excerpt anchors, bidirectional wikilinks, typed knowledge graph relationships, and actionable project tasks.
               </p>
             </div>
           </details>
 
-          <!-- Topic 2: Why Structured Research? -->
+          <!-- Topic 2: Why Organize Research into Separate Notes? -->
           <details class="assistant-accordion" id="ke-why-structured" style="border: 1px solid var(--border-primary); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); margin-bottom: var(--space-3);">
             <summary class="assistant-accordion-summary" style="padding: var(--space-3) var(--space-4); display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
               <span class="assistant-accordion-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
-                ${getIcon('file-search')} <span>2. Why Structured Research? (Flat Text vs. Connected Workspace)</span>
+                ${getIcon('file-search')} <span>2. Why Organize Research into Separate Notes?</span>
+                <span class="badge" style="font-size: 9px; font-weight: normal; color: var(--text-tertiary);">2. Why Structured Research?</span>
               </span>
               <span class="assistant-accordion-icon" style="color: var(--text-tertiary);">${getIcon('chevron-right')}</span>
             </summary>
             <div class="assistant-accordion-content" style="padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border-primary); background-color: var(--bg-secondary); font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.65;">
+              <p style="margin: 0 0 var(--space-3) 0; font-weight: 600; color: var(--text-primary);">
+                Understand why focused, interconnected notes are easier to explore, reuse, and expand than one long research document.
+              </p>
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-4);">
                 <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
                   <div style="font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--status-error); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
@@ -830,7 +876,7 @@ async function renderAssistantPage(container) {
                 </div>
                 <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid rgba(120, 200, 178, 0.35);">
                   <div style="font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--brand-teal); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                    ${getIcon('check')} <span>Flowden Knowledge Package (FKF v1.0.0)</span>
+                    ${getIcon('check')} <span>Flowden Knowledge Package (FKF 2.0 / v1.0.0)</span>
                   </div>
                   <ul style="padding-left: 16px; margin: 0; line-height: 1.6;">
                     <li><strong>Modular Canonical Notes:</strong> Discrete conceptual notes with YAML frontmatter tags and <code>[[fkf:&lt;note-id&gt;|Display Title]]</code> WikiLinks.</li>
@@ -843,21 +889,25 @@ async function renderAssistantPage(container) {
             </div>
           </details>
 
-          <!-- Topic 3: How It Works (The 8-Step Research Pipeline) -->
+          <!-- Topic 3: The Knowledge Exchange Process -->
           <details class="assistant-accordion" id="ke-how-it-works" style="border: 1px solid var(--border-primary); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); margin-bottom: var(--space-3);">
             <summary class="assistant-accordion-summary" style="padding: var(--space-3) var(--space-4); display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
               <span class="assistant-accordion-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
-                ${getIcon('check-circle')} <span>3. How It Works (The 8-Step Research Pipeline)</span>
+                ${getIcon('check-circle')} <span>3. The Knowledge Exchange Process</span>
+                <span class="badge" style="font-size: 9px; font-weight: normal; color: var(--text-tertiary);">3. How It Works</span>
               </span>
               <span class="assistant-accordion-icon" style="color: var(--text-tertiary);">${getIcon('chevron-right')}</span>
             </summary>
             <div class="assistant-accordion-content" style="padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border-primary); background-color: var(--bg-secondary); font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.65;">
+              <p style="margin: 0 0 var(--space-3) 0; font-weight: 600; color: var(--text-primary);">
+                Follow the complete journey from preparing your research topic to importing the finished package into Flowden.
+              </p>
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-3);">
                 <div style="padding: 8px 12px; background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
-                  <strong>Step 1:</strong> Download Research Spec from Download Resources.
+                  <strong>Step 1:</strong> Download Research Spec and copy Universal Research Prompt.
                 </div>
                 <div style="padding: 8px 12px; background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
-                  <strong>Step 2:</strong> Provide Spec to AI (Claude, ChatGPT, or custom agent).
+                  <strong>Step 2:</strong> Provide Spec and Prompt to AI (Claude, ChatGPT, or Gemini).
                 </div>
                 <div style="padding: 8px 12px; background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
                   <strong>Step 3:</strong> Define Topic, scope, domain focus, and depth requirements.
@@ -866,7 +916,7 @@ async function renderAssistantPage(container) {
                   <strong>Step 4:</strong> AI Investigates literature, citations, and semantic links.
                 </div>
                 <div style="padding: 8px 12px; background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
-                  <strong>Step 5:</strong> AI Compiles a valid <code>.flowden.zip</code> archive.
+                  <strong>Step 5:</strong> AI Compiles a valid <code>.fkf</code> or <code>.flowden.zip</code> file.
                 </div>
                 <div style="padding: 8px 12px; background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
                   <strong>Step 6:</strong> Safe pre-extraction inspection and validation in Flowden.
@@ -881,12 +931,164 @@ async function renderAssistantPage(container) {
             </div>
           </details>
 
-          <!-- Topic 5: Package Structure -->
+          <!-- Topic 4: Understanding FKF File Formats -->
           <details class="assistant-accordion" id="ke-package-structure" style="border: 1px solid var(--border-primary); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); margin-bottom: var(--space-3);">
             <summary class="assistant-accordion-summary" style="padding: var(--space-3) var(--space-4); display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
               <span class="assistant-accordion-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
-                ${getIcon('folder')} <span>5. Flowden Knowledge Format (FKF v1.0.0) Architecture</span>
+                ${getIcon('folder')} <span>4. Understanding FKF File Formats</span>
+                <span class="badge" style="font-size: 9px; font-weight: normal; color: var(--text-tertiary);">.fkf vs .flowden.zip</span>
               </span>
+              <span class="assistant-accordion-icon" style="color: var(--text-tertiary);">${getIcon('chevron-right')}</span>
+            </summary>
+            <div class="assistant-accordion-content" style="padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border-primary); background-color: var(--bg-secondary); font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.65;">
+              <p style="margin: 0 0 var(--space-2) 0; font-weight: 600; color: var(--text-primary);">
+                Learn the difference between a standalone .fkf file and supported older .flowden.zip archives.
+              </p>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-3);">
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid rgba(120, 200, 178, 0.35);">
+                  <div style="font-weight: 600; font-size: var(--text-xs); color: var(--brand-teal); margin-bottom: 2px;">FKF 2.0 (.fkf Document) — Recommended</div>
+                  <div class="text-xs text-secondary">A single self-contained JSON file containing the project manifest, folders, notes, sources, excerpts, and relationships. Easily generated directly by chat LLMs in a single response turn without needing zip compression tools.</div>
+                </div>
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <div style="font-weight: 600; font-size: var(--text-xs); color: var(--text-primary); margin-bottom: 2px;">FKF 1.x (.flowden.zip Archive) — Supported</div>
+                  <div class="text-xs text-secondary">A multi-file zip container containing discrete markdown files (<code>notes/*.md</code>), individual JSON documents (<code>folders.json</code>, <code>sources/index.json</code>), and binary assets (images, PDF companion reports). Fully supported for backward compatibility.</div>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <!-- Topic 5: What Can a Knowledge Package Contain? -->
+          <details class="assistant-accordion" id="ke-entities" style="border: 1px solid var(--border-primary); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); margin-bottom: var(--space-3);">
+            <summary class="assistant-accordion-summary" style="padding: var(--space-3) var(--space-4); display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
+              <span class="assistant-accordion-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                ${getIcon('layers')} <span>5. What Can a Knowledge Package Contain?</span>
+                <span class="badge" style="font-size: 9px; font-weight: normal; color: var(--text-tertiary);">5. Flowden Knowledge Format (FKF v1.0.0) Architecture</span>
+              </span>
+              <span class="assistant-accordion-icon" style="color: var(--text-tertiary);">${getIcon('chevron-right')}</span>
+            </summary>
+            <div class="assistant-accordion-content" style="padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border-primary); background-color: var(--bg-secondary); font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.65;">
+              <p style="margin: 0 0 var(--space-2) 0; font-weight: 600; color: var(--text-primary);">
+                Explore the different types of content a package can include: Projects and Folders, Notes and WikiLinks, Sources and Excerpts, Semantic Relationships, and Optional Tasks and Spatial Board content.
+              </p>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-3);">
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <div style="font-weight: 600; font-size: var(--text-xs); color: var(--accent-primary); margin-bottom: 2px;">Projects & Folders (project & folders.json)</div>
+                  <div class="text-xs text-secondary">Scoped research workspace with hierarchical folder taxonomy (<code>fld-*</code>), depth bounds, and metadata descriptors.</div>
+                </div>
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <div style="font-weight: 600; font-size: var(--text-xs); color: var(--brand-teal); margin-bottom: 2px;">Notes & WikiLinks (notes/*.md)</div>
+                  <div class="text-xs text-secondary">Discrete conceptual articles containing YAML frontmatter tags, summaries, and inline WikiLinks (<code>[[fkf:&lt;note-id&gt;|Display Title]]</code>).</div>
+                </div>
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <div style="font-weight: 600; font-size: var(--text-xs); color: var(--status-warning); margin-bottom: 2px;">Sources & Excerpts (sources/index.json)</div>
+                  <div class="text-xs text-secondary">Structured bibliography (<code>src-*</code>) with location-anchored verbatim excerpts (<code>exc-*</code>) and companion files.</div>
+                </div>
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <div style="font-weight: 600; font-size: var(--text-xs); color: var(--status-success); margin-bottom: 2px;">Semantic Relationships (relationships/links.json)</div>
+                  <div class="text-xs text-secondary">Typed connections (<code>rel-*</code>) using the 10 canonical types: <code>supports</code>, <code>contradicts</code>, <code>cites</code>, <code>derived_from</code>, <code>references</code>, <code>embeds</code>, <code>relates_to</code>, <code>depends_on</code>, <code>blocks</code>, <code>inspired_by</code>.</div>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <!-- Topic 6: How Flowden Checks Your Package -->
+          <details class="assistant-accordion" id="ke-import-workflow" style="border: 1px solid var(--border-primary); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); margin-bottom: var(--space-3);">
+            <summary class="assistant-accordion-summary" style="padding: var(--space-3) var(--space-4); display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
+              <span class="assistant-accordion-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                ${getIcon('shield-check')} <span>6. How Flowden Checks Your Package</span>
+                <span class="badge" style="font-size: 9px; font-weight: normal; color: var(--text-tertiary);">6. Safe Pre-Inspection & Transactional Commit Pipeline</span>
+              </span>
+              <span class="assistant-accordion-icon" style="color: var(--text-tertiary);">${getIcon('chevron-right')}</span>
+            </summary>
+            <div class="assistant-accordion-content" style="padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border-primary); background-color: var(--bg-secondary); font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.65;">
+              <p style="margin: 0 0 var(--space-2) 0; font-weight: 600; color: var(--text-primary);">
+                Understand how Flowden checks file structure, format compatibility, internal references, and package contents before import.
+              </p>
+              <ol style="padding-left: 18px; margin: 0; line-height: 1.65;">
+                <li><strong>Pre-Extraction Central Directory Inspection:</strong> Verifies archive bounds (&le;25 MB compressed, &le;100 MB uncompressed, &le;10:1 ratio, &le;1,000 files) and strictly rejects directory traversal sequences (<code>../</code>) and null-byte injection.</li>
+                <li><strong>Schema & Magic-Byte Validation:</strong> Validates <code>fkf_version: "1.0.0"</code> / <code>2.0.0</code> and <code>format: "flowden-knowledge-package"</code>, confirms referential integrity, and inspects magic bytes to block executables (<code>MZ</code>, <code>ELF</code>, Mach-O, scripts).</li>
+                <li><strong>Pre-Import Summary & Destination Selection:</strong> Users receive an entity breakdown preview detailing exact numbers of notes, sources, tasks, relationships, and assets. You choose whether to instantiate a brand-new project or safely merge into an existing workspace.</li>
+                <li><strong>Time-Bound Inspection Ticket Binding:</strong> Issues a single-use inspection ticket bound to user ID, project ID, and SHA-256 archive checksum. The ticket expires after 15 minutes.</li>
+                <li><strong>Atomic Crash-Safe Transaction Commit:</strong> All database entities are inserted inside an isolated MySQL transaction in dependency order: Project &rarr; Folders &rarr; Notes &rarr; Sources &rarr; Excerpts &rarr; Relationships &rarr; Tasks &rarr; Spatial Boards &rarr; Assets. If any error occurs, the entire transaction rolls back instantly with zero partial writes.</li>
+              </ol>
+            </div>
+          </details>
+
+          <!-- Topic 7: Optional Content and Advanced Features -->
+          <details class="assistant-accordion" id="ke-optional-modules" style="border: 1px solid var(--border-primary); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); margin-bottom: var(--space-3);">
+            <summary class="assistant-accordion-summary" style="padding: var(--space-3) var(--space-4); display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
+              <span class="assistant-accordion-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                ${getIcon('layout-grid')} <span>7. Optional Content and Advanced Features</span>
+                <span class="badge" style="font-size: 9px; font-weight: normal; color: var(--text-tertiary);">7. Optional Modules & Advanced Projections</span>
+              </span>
+              <span class="assistant-accordion-icon" style="color: var(--text-tertiary);">${getIcon('chevron-right')}</span>
+            </summary>
+            <div class="assistant-accordion-content" style="padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border-primary); background-color: var(--bg-secondary); font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.65;">
+              <p style="margin: 0 0 var(--space-2) 0; font-weight: 600; color: var(--text-primary);">
+                Learn how Tasks, Spatial Board content, and other supported optional components can be included in a knowledge package.
+              </p>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-3);">
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <div style="font-weight: 600; font-size: var(--text-xs); color: var(--status-success); margin-bottom: 3px;">Actionable Tasks (<code>optional/tasks.json</code>)</div>
+                  <div class="text-xs text-secondary" style="line-height: 1.55;">
+                    Maps to Flowden Kanban (<code>tsk-*</code>) with status (<code>todo</code>, <code>in_progress</code>, <code>done</code>) and priority (<code>low</code>, <code>medium</code>, <code>high</code>, <code>urgent</code>). <code>due_date</code> remains <code>null</code> unless explicitly specified by prompt.
+                  </div>
+                </div>
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <div style="font-weight: 600; font-size: var(--text-xs); color: var(--brand-teal); margin-bottom: 3px;">Spatial Board (<code>optional/spatial-board.json</code>)</div>
+                  <div class="text-xs text-secondary" style="line-height: 1.55;">
+                    Positions notes on Flowden's 2D canvas with coordinates (<code>x</code>, <code>y</code>), card clusters (<code>grp-*</code>, <code>bitm-*</code>), and directed visual canvas wires (<code>bcon-*</code>).
+                  </div>
+                </div>
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <div style="font-weight: 600; font-size: var(--text-xs); color: var(--status-warning); margin-bottom: 3px;">Research Report PDF (<code>exports/research-report.pdf</code>)</div>
+                  <div class="text-xs text-secondary" style="line-height: 1.55;">
+                    Self-contained human-readable PDF reading document stored as a project asset in Flowden, verified with safe magic-byte header (<code>%PDF-</code>).
+                  </div>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <!-- Topic 8: AI Compatibility and Frequently Asked Questions -->
+          <details class="assistant-accordion" id="ke-faq" style="border: 1px solid var(--border-primary); background-color: var(--bg-tertiary); border-radius: var(--radius-sm);">
+            <summary class="assistant-accordion-summary" style="padding: var(--space-3) var(--space-4); display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;">
+              <span class="assistant-accordion-title" style="font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                ${getIcon('help-circle')} <span>8. AI Compatibility and Frequently Asked Questions</span>
+                <span class="badge" style="font-size: 9px; font-weight: normal; color: var(--text-tertiary);">8. LLM Compatibility, Limitations & FAQ</span>
+              </span>
+              <span class="assistant-accordion-icon" style="color: var(--text-tertiary);">${getIcon('chevron-right')}</span>
+            </summary>
+            <div class="assistant-accordion-content" style="padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border-primary); background-color: var(--bg-secondary); font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.65;">
+              <p style="margin: 0 0 var(--space-3) 0; font-weight: 600; color: var(--text-primary);">
+                Find guidance for using external AI tools, preparing FKF files, and resolving common research and import problems.
+              </p>
+              <div style="display: flex; flex-direction: column; gap: var(--space-3);">
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <strong style="color: var(--text-primary); font-size: var(--text-xs);">ChatGPT Plus / Pro (OpenAI) Compatibility:</strong>
+                  <p style="margin: 2px 0 0 0;">ChatGPT with Advanced Data Analysis (Python Code Interpreter) can generate Python scripts to create the entire directory hierarchy, write the JSON and Markdown files, and bundle them into a downloadable <code>.flowden.zip</code> archive or output a single <code>.fkf</code> document in one turn.</p>
+                </div>
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <strong style="color: var(--text-primary); font-size: var(--text-xs);">Claude (Anthropic) Compatibility:</strong>
+                  <p style="margin: 2px 0 0 0;">Claude 3.5 Sonnet and Claude 3 Opus excel at following the schema contract, crafting dense academic notes, and formatting complex semantic relationships. Simply instruct Claude to output raw JSON formatted as a standalone <code>.fkf</code> file.</p>
+                </div>
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <strong style="color: var(--text-primary); font-size: var(--text-xs);">Google NotebookLM Workflow:</strong>
+                  <p style="margin: 2px 0 0 0;">NotebookLM is ideal for ingesting proprietary PDFs and raw transcripts. Copy its synthesized study guides and source citations into a general-purpose model along with <code>FLOWDEN_RESEARCH_SPEC.md</code> and the Universal Research Prompt to generate the structured package.</p>
+                </div>
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <strong style="color: var(--status-warning); font-size: var(--text-xs);">ZIP Generation Fallback:</strong>
+                  <p style="margin: 2px 0 0 0;">If your model cannot generate a binary zip, instruct it to output each file in Markdown/JSON code blocks. Save locally into the FKF structure and run: <code>zip -r my-research.flowden.zip manifest.json folders.json project notes sources relationships assets optional exports</code></p>
+                </div>
+                <div style="padding: var(--space-3); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+                  <strong style="color: var(--text-primary); font-size: var(--text-xs);">Package Versions & Diagnostics:</strong>
+                  <p style="margin: 2px 0 0 0;">Flowden officially supports standalone single-document <code>.fkf</code> files (FKF 2.0, <code>format: "flowden-knowledge-format"</code>) alongside legacy <code>.flowden.zip</code> archive packages (FKF 1.x, <code>format: "flowden-knowledge-package"</code>). Both formats are validated strictly against their formal JSON schemas and imported into unified workspace entities.</p>
+                </div>
+              </div>
+            </div>
+          </details>
+
+        </div>
               <span class="assistant-accordion-icon" style="color: var(--text-tertiary);">${getIcon('chevron-right')}</span>
             </summary>
             <div class="assistant-accordion-content" style="padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border-primary); background-color: var(--bg-secondary); font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.65;">
@@ -1392,6 +1594,25 @@ async function renderAssistantPage(container) {
   });
 
   // 12. Flowden Knowledge Exchange Package Importer Triggers
+  document.getElementById('btn-copy-universal-prompt')?.addEventListener('click', () => {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard.writeText(UNIVERSAL_RESEARCH_PROMPT).then(() => {
+        const labelEl = document.getElementById('copy-prompt-label');
+        if (labelEl) labelEl.textContent = 'Copied!';
+        setTimeout(() => {
+          if (labelEl) labelEl.textContent = 'Copy Universal Prompt';
+        }, 2500);
+        if (typeof window.showToast === 'function') {
+          window.showToast('Universal Research Prompt copied to clipboard!', 'success');
+        }
+      }).catch(() => {
+        if (typeof window.showToast === 'function') {
+          window.showToast('Failed to copy prompt to clipboard.', 'error');
+        }
+      });
+    }
+  });
+
   const triggerPackageImport = () => {
     if (typeof window.openExchangeImportModal === 'function') {
       window.openExchangeImportModal({

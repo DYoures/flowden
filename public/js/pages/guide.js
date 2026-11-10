@@ -17,11 +17,13 @@ function renderGuidePage(container, params = {}) {
     }
   } catch (e) {}
 
+  const mcpServerPath = 'C:/Users/Sod/.gemini/antigravity/scratch/flowden/server/mcp/index.js';
+
   const claudeDesktopConfig = JSON.stringify({
     mcpServers: {
       flowden: {
         command: "node",
-        args: ["server/mcp/index.js"],
+        args: [mcpServerPath],
         env: {
           FLOWDEN_API_URL: `${origin}/mcp`,
           FLOWDEN_API_KEY: activeMcpKey

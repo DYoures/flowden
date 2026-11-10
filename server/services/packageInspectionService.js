@@ -18,6 +18,10 @@ const {
   stripYamlFrontmatter,
   computeDeterministicSha256
 } = require('../utils/fkfCanonicalParser');
+const {
+  parseMarkdownDocument,
+  isMarkdownFile
+} = require('../utils/markdownKnowledgeParser');
 
 const STAGING_BASE_DIR = path.resolve(__dirname, '..', '..', 'temp', 'fkp_inspect_staging');
 const UPLOAD_TEMP_DIR = path.resolve(__dirname, '..', '..', 'temp', 'fkp_inspect_uploads');
@@ -286,6 +290,116 @@ async function inspectKnowledgePackage({
   let stagingCleanedUp = false;
 
   try {
+    // Check if package is a structured Markdown document (.md)
+    if (isMarkdownFile(zipFilePath, originalFilename)) {
+      let rawMdText = '';
+      try {
+        rawMdText = fs.readFileSync(zipFilePath, 'utf8');
+      } catch (readErr) {
+        errors.push({
+          code: 'FILE_READ_ERROR',
+          file: originalFilename || 'package.md',
+          message: `Failed to read Markdown file: ${readErr.message}`
+        });
+        return buildInspectionResponse();
+      }
+
+      const parseRes = parseMarkdownDocument(rawMdText, originalFilename);
+      if (!parseRes.valid) {
+        errors.push(...parseRes.errors);
+        warnings.push(...parseRes.warnings);
+        await SecurityService.logSecurityEvent({
+          userId,
+          eventType: 'EXCHANGE_PACKAGE_ARCHIVE_REJECTED',
+          severity: 'high',
+          ip,
+          targetType: 'exchange_package',
+          targetId: operationId,
+          details: { originalFilename, errorCodes: errors.map(e => e.code) }
+        });
+        return buildInspectionResponse();
+      }
+
+      const canonical = parseRes.canonical;
+      canonicalSha256 = canonical.sha256;
+      packageMeta = {
+        package_name: path.basename(originalFilename || 'package.md'),
+        package_id: canonical.package_id,
+        format: canonical.format,
+        fkf_version: canonical.fkf_version,
+        sha256: archiveSha256,
+        raw_sha256: archiveSha256,
+        canonical_sha256: canonicalSha256
+      };
+      projectMeta = canonical.project;
+      counts = {
+        folders: canonical.folders.length,
+        notes: canonical.notes.length,
+        sources: canonical.sources.length,
+        excerpts: canonical.sources.reduce((sum, s) => sum + (s.excerpts ? s.excerpts.length : 0), 0),
+        relationships: canonical.relationships.length,
+        assets: 0,
+        tasks: (canonical.optional_modules.tasks && canonical.optional_modules.tasks.tasks) ? canonical.optional_modules.tasks.tasks.length : 0,
+        board_items: 0
+      };
+      optionalModulesPresent = {
+        tasks: false,
+        spatial_board: false,
+        research_report_pdf: false
+      };
+
+      previewSummary = {
+        folders: canonical.folders.map(f => ({ id: f.id, name: f.name, parent_id: f.parent_id })),
+        notes: canonical.notes.map(n => ({
+          id: n.id,
+          title: n.title,
+          folder_id: n.folder_id,
+          tags: n.tags || [],
+          word_count: n.content_markdown ? n.content_markdown.split(/\s+/).filter(Boolean).length : 0
+        })),
+        sources: canonical.sources.map(s => ({
+          id: s.id,
+          title: s.title,
+          source_type: s.source_type,
+          source_url: s.source_url || null,
+          excerpt_count: s.excerpts ? s.excerpts.length : 0
+        })),
+        relationships: canonical.relationships.map(r => ({
+          id: r.id,
+          source_id: r.source_id,
+          target_id: r.target_id,
+          link_type: r.link_type,
+          confidence: r.confidence || 0.85
+        })),
+        assets: []
+      };
+
+      const folderErrors = validateFolderHierarchy(canonical.folders);
+      if (folderErrors.length > 0) {
+        errors.push(...folderErrors);
+      }
+
+      stageCanonicalPackage(canonical, stagingDir);
+
+      await SecurityService.logSecurityEvent({
+        userId,
+        eventType: errors.length === 0 ? 'EXCHANGE_PACKAGE_INSPECTED_VALID' : 'EXCHANGE_PACKAGE_INSPECTED_INVALID',
+        severity: errors.length === 0 ? 'info' : 'warning',
+        ip,
+        targetType: 'exchange_package',
+        targetId: packageMeta.package_id || operationId,
+        details: {
+          operationId,
+          originalFilename,
+          valid: errors.length === 0,
+          errorCount: errors.length,
+          warningCount: warnings.length
+        }
+      });
+
+      return buildInspectionResponse();
+    }
+
     // Check if package is an FKF 2.0 single-file JSON/text document
     if (isFkfJsonFile(zipFilePath, originalFilename)) {
       let rawFkfText = '';
@@ -345,23 +459,27 @@ async function inspectKnowledgePackage({
       };
 
       previewSummary = {
-        folders: canonical.folders.slice(0, 10).map(f => ({ id: f.id, name: f.name, parent_id: f.parent_id })),
-        notes: canonical.notes.slice(0, 10).map(n => ({
+        folders: canonical.folders.map(f => ({ id: f.id, name: f.name, parent_id: f.parent_id })),
+        notes: canonical.notes.map(n => ({
           id: n.id,
           title: n.title,
           folder_id: n.folder_id,
+          tags: n.tags || [],
           word_count: n.content_markdown ? n.content_markdown.split(/\s+/).filter(Boolean).length : 0
         })),
-        sources: canonical.sources.slice(0, 10).map(s => ({
+        sources: canonical.sources.map(s => ({
           id: s.id,
           title: s.title,
           source_type: s.source_type,
+          source_url: s.source_url || null,
           excerpt_count: s.excerpts ? s.excerpts.length : 0
         })),
-        relationships: canonical.relationships.slice(0, 10).map(r => ({
+        relationships: canonical.relationships.map(r => ({
+          id: r.id,
           source_id: r.source_id,
           target_id: r.target_id,
-          link_type: r.link_type
+          link_type: r.link_type,
+          confidence: r.confidence || 0.85
         })),
         assets: []
       };

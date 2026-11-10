@@ -1087,8 +1087,17 @@
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.55));
 }
 
+.graph-node-circle {
+  will-change: transform;
+}
+
 .graph-node-circle .node-selection-ring {
+  display: none;
   animation: selectionPulse 2.4s ease-in-out infinite;
+}
+
+.graph-node-circle.node--selected .node-selection-ring {
+  display: block;
 }
 
 @keyframes selectionPulse {
@@ -1106,18 +1115,30 @@
 }
 
 .graph-node-label {
-  font-size: 11px;
+  font-size: 11.5px;
   font-family: var(--font-sans);
   pointer-events: none;
   user-select: none;
   transition: fill var(--transition-fast), font-weight var(--transition-fast);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  paint-order: stroke fill;
+  stroke: var(--bg-primary);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  line-height: 1.25;
 }
 
 .graph-node-circle:hover .graph-node-label,
 .graph-node-circle.node--selected .graph-node-label {
   fill: var(--text-primary) !important;
   font-weight: 600 !important;
+  stroke-width: 4.5px;
+}
+
+.graph-cluster-badge {
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 220ms ease;
 }
 
 .graph-bezier-edge {
@@ -1125,14 +1146,23 @@
   transition: stroke-opacity 180ms ease, stroke-width 180ms ease, stroke 180ms ease;
 }
 
+.graph-bezier-edge.edge--structural {
+  stroke-dasharray: 3 4;
+}
+
 .graph-bezier-edge.edge--highlighted {
   stroke: var(--accent-primary) !important;
-  stroke-width: 2px !important;
+  stroke-width: 2.2px !important;
   stroke-opacity: 1 !important;
+  stroke-dasharray: none !important;
 }
 
 .graph-bezier-edge.edge--dimmed {
-  stroke-opacity: 0.08 !important;
+  stroke-opacity: 0.05 !important;
+}
+
+.project-anchor-ring {
+  animation: selectionPulse 3s ease-in-out infinite;
 }
 
 /* Graph Appearance Controls */

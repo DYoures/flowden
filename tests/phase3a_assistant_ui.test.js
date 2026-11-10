@@ -28,6 +28,7 @@ const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 
 const SPEC_PATH = path.resolve(__dirname, '..', 'docs', 'knowledge-exchange', 'FLOWDEN_RESEARCH_SPEC.md');
 const SCHEMA_PATH = path.resolve(__dirname, '..', 'docs', 'knowledge-exchange', 'flowden-package.schema.json');
+const SCHEMA_V2_PATH = path.resolve(__dirname, '..', 'docs', 'knowledge-exchange', 'flowden-knowledge-format-v2.schema.json');
 const REF_ZIP_PATH = path.resolve(__dirname, '..', 'docs', 'knowledge-exchange', 'examples', 'flowden-reference-package.flowden.zip');
 const ASSISTANT_JS_PATH = path.resolve(__dirname, '..', 'public', 'js', 'pages', 'assistant.js');
 
@@ -91,6 +92,7 @@ function fetchHttp(urlStr, options = {}) {
 
     const expectedSpecBuf = fs.readFileSync(SPEC_PATH);
     const expectedSchemaBuf = fs.readFileSync(SCHEMA_PATH);
+    const expectedSchemaV2Buf = fs.readFileSync(SCHEMA_V2_PATH);
     const expectedRefZipBuf = fs.readFileSync(REF_ZIP_PATH);
 
     // Test 1: GET research-spec
@@ -105,7 +107,7 @@ function fetchHttp(urlStr, options = {}) {
       `size=${resSpec.buffer.length} bytes, ct=${resSpec.headers['content-type']}`
     );
 
-    // Test 2: GET package-schema
+    // Test 2: GET package-schema (Legacy)
     const resSchema = await fetchHttp(`${BASE_URL}/api/v1/exchange/resources/package-schema`);
     record(
       'Download flowden-package.schema.json returns HTTP 200 with exact byte match',
@@ -114,6 +116,17 @@ function fetchHttp(urlStr, options = {}) {
         resSchema.headers['content-type'].includes('application/schema+json') &&
         resSchema.headers['content-disposition'].includes('flowden-package.schema.json'),
       `size=${resSchema.buffer.length} bytes, ct=${resSchema.headers['content-type']}`
+    );
+
+    // Test 2B: GET schema-v2 (FKF 2.0 Schema)
+    const resSchemaV2 = await fetchHttp(`${BASE_URL}/api/v1/exchange/resources/schema-v2`);
+    record(
+      'Download flowden-knowledge-format-v2.schema.json returns HTTP 200 with exact byte match',
+      resSchemaV2.status === 200 &&
+        resSchemaV2.buffer.equals(expectedSchemaV2Buf) &&
+        resSchemaV2.headers['content-type'].includes('application/schema+json') &&
+        resSchemaV2.headers['content-disposition'].includes('flowden-knowledge-format-v2.schema.json'),
+      `size=${resSchemaV2.buffer.length} bytes, ct=${resSchemaV2.headers['content-type']}`
     );
 
     // Test 3: GET reference-package
@@ -261,13 +274,15 @@ function fetchHttp(urlStr, options = {}) {
       `accurate=${hasAccurateStatus}, noOutdated=${hasNoOutdatedPlanning}`
     );
 
-    // Test 14: All 3 downloadable resources referenced with download buttons
+    // Test 15: Downloadable resources referenced with download buttons in UI
     const hasSpecDownload = assistantJsContent.includes('data-resource="research-spec"') && assistantJsContent.includes('FLOWDEN_RESEARCH_SPEC.md');
     const hasSchemaDownload = assistantJsContent.includes('data-resource="package-schema"') && assistantJsContent.includes('flowden-package.schema.json');
     const hasRefZipDownload = assistantJsContent.includes('data-resource="reference-package"') && assistantJsContent.includes('flowden-reference-package.flowden.zip');
+    // Schema-v2 card removed from beginner-facing UI per Markdown Knowledge Exchange spec, but endpoint retained
+    const schemaV2CardRemoved = !assistantJsContent.includes('data-resource="schema-v2"');
     record(
-      'All 3 downloadable resources have direct download triggers in UI',
-      hasSpecDownload && hasSchemaDownload && hasRefZipDownload
+      'Downloadable resources have direct download triggers in UI (schema card removed per spec)',
+      hasSpecDownload && hasSchemaDownload && hasRefZipDownload && schemaV2CardRemoved
     );
 
     // Test 15: Zero emoji icons in UI markup

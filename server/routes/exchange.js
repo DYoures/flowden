@@ -59,6 +59,16 @@ const ALLOWED_RESOURCES = {
     mimeType: 'application/schema+json; charset=utf-8',
     filePath: path.resolve(__dirname, '..', '..', 'docs', 'knowledge-exchange', 'flowden-knowledge-format-v2.schema.json')
   },
+  'flowden-knowledge-format-v2.schema.json': {
+    filename: 'flowden-knowledge-format-v2.schema.json',
+    mimeType: 'application/schema+json; charset=utf-8',
+    filePath: path.resolve(__dirname, '..', '..', 'docs', 'knowledge-exchange', 'flowden-knowledge-format-v2.schema.json')
+  },
+  'flowden-knowledge-format.schema.json': {
+    filename: 'flowden-knowledge-format-v2.schema.json',
+    mimeType: 'application/schema+json; charset=utf-8',
+    filePath: path.resolve(__dirname, '..', '..', 'docs', 'knowledge-exchange', 'flowden-knowledge-format-v2.schema.json')
+  },
   'reference-package': {
     filename: 'flowden-reference-package.flowden.zip',
     mimeType: 'application/zip',
@@ -190,10 +200,10 @@ router.post('/inspect', (req, res) => {
         if (!fs.existsSync(inspectionStagingDir)) {
           fs.mkdirSync(inspectionStagingDir, { recursive: true });
         }
-        const isFkf = path.extname(uploadedPath).toLowerCase() === '.fkf' ||
-                      path.extname(uploadedPath).toLowerCase() === '.json' ||
-                      (report.package && (report.package.format === 'flowden-knowledge-format' || report.package.name?.endsWith('.fkf')));
-        const stagedPackageName = isFkf ? 'inspected_package.fkf' : 'inspected_package.flowden.zip';
+        const ext = path.extname(uploadedPath).toLowerCase();
+        const isMd = ext === '.md' || ext === '.markdown' || (report.package && (report.package.format === 'flowden-markdown-knowledge' || report.package.name?.endsWith('.md')));
+        const isFkf = ext === '.fkf' || ext === '.json' || (report.package && (report.package.format === 'flowden-knowledge-format' || report.package.name?.endsWith('.fkf')));
+        const stagedPackageName = isMd ? 'inspected_package.md' : (isFkf ? 'inspected_package.fkf' : 'inspected_package.flowden.zip');
         const stagedPackagePath = path.join(inspectionStagingDir, stagedPackageName);
         fs.copyFileSync(uploadedPath, stagedPackagePath);
 
@@ -252,6 +262,7 @@ router.post('/inspect', (req, res) => {
 
       const responsePayload = {
         valid: report.valid,
+        error: report.valid ? null : ((report.validation && report.validation.errors && report.validation.errors[0]?.message) || 'Package validation failed.'),
         inspection_token: inspectionToken,
         expires_in_seconds: report.valid ? expiresInSeconds : null,
         operation_id: report.operation_id,

@@ -34,7 +34,8 @@ const { cleanupStaleStagingDirs } = require('./services/packageInspectionService
 cleanupStaleStagingDirs(3600000);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
+const HOST = process.env.HOST || '0.0.0.0';
 
 // Security headers with YouTube privacy-enhanced iframe and thumbnail support
 app.use(helmet({
@@ -225,14 +226,21 @@ async function start() {
   }
 
   return new Promise((resolve, reject) => {
-    const server = app.listen(PORT, (err) => {
+    const server = app.listen(PORT, HOST, (err) => {
       if (err) return reject(err);
       console.log(`\n==================================================`);
       console.log(`  FLOWDEN: Modern Spatial Productivity Workspace`);
-      console.log(`  Server listening on http://localhost:${PORT}`);
+      console.log(`  Server listening on http://127.0.0.1:${PORT}`);
       console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`==================================================\n`);
       resolve(server);
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`[FATAL] Port ${PORT} is already in use. Automatic port switching is disabled.`);
+      }
+      reject(err);
     });
   });
 }

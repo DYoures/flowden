@@ -132,8 +132,8 @@
       titleEl.innerHTML = `
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="color: var(--brand-teal); display: inline-flex;">${getIcon('share-2')}</span>
-          <span>Flowden Knowledge Package Importer</span>
-          <span class="badge" style="font-size: 10px; font-family: var(--font-mono); background: rgba(120, 200, 178, 0.12); color: var(--brand-teal); border: 1px solid rgba(120, 200, 178, 0.3);">FKF 2.0 / 1.0</span>
+          <span>Import a Research Package</span>
+          <span class="badge" style="font-size: 10px; font-family: var(--font-mono); background: rgba(120, 200, 178, 0.12); color: var(--brand-teal); border: 1px solid rgba(120, 200, 178, 0.3);">Markdown (.md) / ZIP</span>
         </div>
       `;
     }
@@ -154,12 +154,12 @@
         <span style="color: var(--text-tertiary);">&rarr;</span>
         <div style="display: flex; align-items: center; gap: 6px; color: ${stepNumber >= 2 ? 'var(--text-primary)' : 'var(--text-tertiary)'}; font-weight: ${stepNumber === 2 ? '600' : '400'};">
           <span style="width: 20px; height: 20px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; background: ${stepNumber >= 2 ? 'var(--accent-primary)' : 'var(--bg-tertiary)'}; color: ${stepNumber >= 2 ? '#fff' : 'var(--text-secondary)'};">2</span>
-          <span>Inspection & Preview</span>
+          <span>Check Package</span>
         </div>
         <span style="color: var(--text-tertiary);">&rarr;</span>
         <div style="display: flex; align-items: center; gap: 6px; color: ${stepNumber >= 3 ? 'var(--text-primary)' : 'var(--text-tertiary)'}; font-weight: ${stepNumber === 3 ? '600' : '400'};">
           <span style="width: 20px; height: 20px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; background: ${stepNumber >= 3 ? 'var(--accent-primary)' : 'var(--bg-tertiary)'}; color: ${stepNumber >= 3 ? '#fff' : 'var(--text-secondary)'};">3</span>
-          <span>Approval & Commit</span>
+          <span>Review & Import</span>
         </div>
         <span style="color: var(--text-tertiary);">&rarr;</span>
         <div style="display: flex; align-items: center; gap: 6px; color: ${stepNumber === 4 ? 'var(--status-success)' : 'var(--text-tertiary)'}; font-weight: ${stepNumber === 4 ? '600' : '400'};">
@@ -176,8 +176,10 @@
       const hasFile = Boolean(privateSession.file);
       const isFileSizeValid = hasFile ? privateSession.file.size <= MAX_COMPRESSED_BYTES : true;
       const isExtValid = hasFile ? (
-        privateSession.file.name.toLowerCase().endsWith('.zip') ||
+        privateSession.file.name.toLowerCase().endsWith('.md') ||
+        privateSession.file.name.toLowerCase().endsWith('.markdown') ||
         privateSession.file.name.toLowerCase().endsWith('.flowden.zip') ||
+        privateSession.file.name.toLowerCase().endsWith('.zip') ||
         privateSession.file.name.toLowerCase().endsWith('.fkf') ||
         privateSession.file.name.toLowerCase().endsWith('.json')
       ) : true;
@@ -185,18 +187,22 @@
       bodyEl.innerHTML = `
         ${stepsHtml}
 
+        <p class="text-xs text-secondary" style="margin: 0 0 var(--space-4) 0; line-height: 1.55;">
+          Select your research file and choose where it should go in Flowden.
+        </p>
+
         <!-- Destination Selection -->
         <div style="margin-bottom: var(--space-4); padding: var(--space-4); background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
           <label style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-primary); margin-bottom: 8px;">
-            Import Destination
+            Destination Selection
           </label>
           <div style="display: flex; flex-direction: column; gap: 8px;">
             <label style="display: flex; align-items: flex-start; gap: 8px; font-size: var(--text-xs); color: var(--text-primary); cursor: pointer;">
               <input type="radio" name="exchange-dest-mode" value="new" ${privateSession.destinationMode === 'new' ? 'checked' : ''} style="margin-top: 2px;" />
               <div>
-                <strong style="color: var(--text-primary);">Create as New Project</strong>
-                <div class="text-secondary" style="font-size: 11px; margin-top: 2px;">
-                  Instantiates a fresh project workspace inheriting the title, summary, color, and tags declared in the package manifest.
+                <strong style="color: var(--text-primary);">Create a New Project</strong>
+                <div class="text-secondary" style="font-size: 11px; margin-top: 2px; line-height: 1.5;">
+                  Start a fresh Project using the title and structure from your package.
                 </div>
               </div>
             </label>
@@ -204,17 +210,20 @@
             <label style="display: flex; align-items: flex-start; gap: 8px; font-size: var(--text-xs); color: var(--text-primary); cursor: pointer;">
               <input type="radio" name="exchange-dest-mode" value="existing" ${privateSession.destinationMode === 'existing' ? 'checked' : ''} style="margin-top: 2px;" />
               <div style="flex: 1;">
-                <strong style="color: var(--text-primary);">Merge into Existing Project</strong>
-                <div class="text-secondary" style="font-size: 11px; margin-top: 2px; margin-bottom: 6px;">
-                  Integrates folders, notes, sources, and tasks directly into one of your existing authorized workspaces.
+                <strong style="color: var(--text-primary);">Merge into an Existing Project</strong>
+                <div class="text-secondary" style="font-size: 11px; margin-top: 2px; margin-bottom: 6px; line-height: 1.5;">
+                  Add this research to a Project you already have. Existing notes will not be overwritten. New notes are added alongside them, and the Spatial Board will be updated with the new content.
                 </div>
                 ${privateSession.destinationMode === 'existing' ? `
                   <select id="exchange-destination-project-select" class="select" style="font-size: 12px; width: 100%; max-width: 400px;">
-                    ${privateSession.projects.length === 0 ? '<option value="">No authorized projects available</option>' : privateSession.projects.map(p => `
-                      <option value="${p.id}" ${String(privateSession.destinationProjectId) === String(p.id) ? 'selected' : ''}>
-                        ${escapeHtml(p.title)} (${p.role || 'owner'})
-                      </option>
-                    `).join('')}
+                    ${privateSession.projects.length === 0 ? '<option value="">No authorized projects available</option>' : `
+                      <option value="" ${!privateSession.destinationProjectId ? 'selected' : ''} disabled>Select an existing project...</option>
+                      ${privateSession.projects.map(p => `
+                        <option value="${p.id}" ${String(privateSession.destinationProjectId) === String(p.id) ? 'selected' : ''}>
+                          ${escapeHtml(p.title)} (${p.role || 'owner'})
+                        </option>
+                      `).join('')}
+                    `}
                   </select>
                 ` : ''}
               </div>
@@ -225,20 +234,22 @@
         <!-- File Upload Dropzone -->
         <div style="margin-bottom: var(--space-4);">
           <label style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-primary); margin-bottom: 8px;">
-            Knowledge Package (.fkf, .flowden.zip)
+            File Selection
           </label>
           
           ${!hasFile ? `
             <div id="exchange-dropzone" style="border: 2px dashed var(--border-primary); border-radius: var(--radius-sm); padding: var(--space-6) var(--space-4); text-align: center; background-color: var(--bg-secondary); cursor: pointer; transition: all 0.15s ease;">
-              <input type="file" id="exchange-file-input" accept=".zip,.flowden.zip,.fkf,.json" style="display: none;" />
+              <input type="file" id="exchange-file-input" accept=".md,.markdown,.flowden.zip,.zip,.fkf,.json" style="display: none;" />
               <div style="width: 40px; height: 40px; border-radius: var(--radius-sm); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); display: inline-flex; align-items: center; justify-content: center; color: var(--accent-primary); margin-bottom: 8px;">
                 ${getIcon('download')}
               </div>
               <div style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">
-                Click to browse or drag & drop package archive
+                Choose a file or drag it here
               </div>
-              <div class="text-secondary" style="font-size: 11px; line-height: 1.5; max-width: 440px; margin: 0 auto;">
-                Accepts <code style="color: var(--accent-primary);">.fkf</code> (FKF 2.0 single file) or <code style="color: var(--accent-primary);">.flowden.zip</code> (package archive). Maximum compressed archive size: <strong>100 MB</strong>.
+              <div class="text-secondary" style="font-size: 11px; line-height: 1.6; max-width: 460px; margin: 0 auto;">
+                <code style="color: var(--brand-teal);">.md</code> — Structured Markdown document containing multiple Notes.<br/>
+                <code style="color: var(--accent-primary);">.flowden.zip</code> — Complete knowledge package.<br/>
+                Maximum file size: <strong>100 MB</strong>.
               </div>
             </div>
           ` : `
@@ -263,7 +274,7 @@
           ${(!isExtValid || !isFileSizeValid) ? `
             <div style="margin-top: 8px; padding: 8px 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-sm); font-size: 11px; color: var(--status-error); display: flex; align-items: center; gap: 6px;">
               <span>${getIcon('x')}</span>
-              <span>${!isExtValid ? 'Invalid file extension. Please select a .fkf or .flowden.zip package.' : 'File exceeds 100 MB limit.'}</span>
+              <span>${!isExtValid ? 'Invalid file extension. Please select a .md or .flowden.zip package.' : 'File exceeds 100 MB limit.'}</span>
             </div>
           ` : ''}
         </div>
@@ -272,7 +283,7 @@
       footerEl.innerHTML = `
         <button type="button" class="btn btn--secondary btn--md" id="btn-exchange-cancel">Cancel</button>
         <button type="button" class="btn btn--primary btn--md" id="btn-exchange-start-inspect" ${(!hasFile || !isExtValid || !isFileSizeValid) ? 'disabled' : ''}>
-          ${getIcon('shield-check')} <span>Inspect Package</span>
+          ${getIcon('shield-check')} <span>Check Package</span>
         </button>
       `;
 
@@ -352,9 +363,9 @@
         ${stepsHtml}
         <div style="padding: var(--space-8) var(--space-4); text-align: center;">
           <div class="spinner" style="width: 32px; height: 32px; border-width: 3px; margin: 0 auto var(--space-4) auto; border-top-color: var(--accent-primary);"></div>
-          <h3 style="font-size: var(--text-base); font-weight: 600; color: var(--text-primary); margin: 0 0 6px 0;">Safely Inspecting Package</h3>
+          <h3 style="font-size: var(--text-base); font-weight: 600; color: var(--text-primary); margin: 0 0 6px 0;">Checking Your Package</h3>
           <p class="text-secondary" style="font-size: var(--text-xs); line-height: 1.6; max-width: 480px; margin: 0 auto;">
-            Inspecting central directory bounds, ZIP compression ratios, FKF JSON schema validation, internal referential integrity, and asset magic bytes...
+            Flowden is checking the package structure and preparing a preview. This does not import anything into your Project yet.
           </p>
         </div>
       `;
@@ -362,7 +373,7 @@
         <button type="button" class="btn btn--secondary btn--md" disabled>Cancel</button>
         <button type="button" class="btn btn--primary btn--md" disabled>
           <span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>
-          <span>Inspecting...</span>
+          <span>Checking...</span>
         </button>
       `;
       return;
@@ -377,10 +388,10 @@
         <div style="margin-bottom: var(--space-4); padding: var(--space-4); background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-sm);">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--status-error); font-weight: 600; font-size: var(--text-sm);">
             <span>${getIcon('x')}</span>
-            <span>Inspection Failed: ${escapeHtml(privateSession.errorMessage || 'Archive validation error')}</span>
+            <span>Unable to Check Package: ${escapeHtml(privateSession.errorMessage || 'Archive validation error')}</span>
           </div>
           <p class="text-secondary" style="font-size: var(--text-xs); margin: 0 0 var(--space-3) 0;">
-            The uploaded package did not satisfy the Flowden Knowledge Format validation contract. Please resolve the issues below and try again:
+            Flowden couldn't read or validate this package. Check that you selected a supported file and that it follows the required format.
           </p>
           <div style="display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto;">
             ${(privateSession.errorDetails || []).map(err => `
@@ -394,7 +405,7 @@
         </div>
       `;
       footerEl.innerHTML = `
-        <button type="button" class="btn btn--secondary btn--md" id="btn-exchange-error-back">Select Different Package</button>
+        <button type="button" class="btn btn--secondary btn--md" id="btn-exchange-error-back">Choose Another File</button>
         <button type="button" class="btn btn--secondary btn--md" id="btn-exchange-error-close">Close</button>
       `;
       footerEl.querySelector('#btn-exchange-error-back')?.addEventListener('click', () => {
@@ -418,19 +429,34 @@
       const warnings = data.warnings || [];
       const isCommitting = privateSession.step === 'committing';
 
+      const destProjectTitle = privateSession.destinationMode === 'existing' && privateSession.destinationProjectId
+        ? ((privateSession.projects.find(p => String(p.id) === String(privateSession.destinationProjectId)) || {}).title || 'Selected Project')
+        : (proj.title || 'Untitled Project');
+
       const destinationLabel = privateSession.destinationMode === 'existing' && privateSession.destinationProjectId
-        ? `Existing Project: ${escapeHtml((privateSession.projects.find(p => String(p.id) === String(privateSession.destinationProjectId)) || {}).title || 'Selected Project')}`
-        : `New Project: "${escapeHtml(proj.title || 'Untitled Workspace')}"`;
+        ? `Existing Project: ${escapeHtml(destProjectTitle)}`
+        : `New Project: "${escapeHtml(destProjectTitle)}"`;
 
       bodyEl.innerHTML = `
         ${stepsHtml}
+
+        <!-- Section Title & Subtitle -->
+        <div style="margin-bottom: var(--space-4);">
+          <h3 style="font-size: var(--text-base); font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">Review Your Package</h3>
+          <p class="text-secondary" style="font-size: var(--text-xs); margin: 0 0 8px 0;">
+            Check the package contents before adding them to your Project.
+          </p>
+          <div class="text-secondary" style="font-size: 11px; line-height: 1.5; padding: 8px 12px; background-color: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary);">
+            Review the available Notes, Sources, Relationships, Folders, and Assets. Any warnings should be checked before continuing.
+          </div>
+        </div>
 
         <!-- Package Overview Banner -->
         <div style="padding: var(--space-4); background-color: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-primary); margin-bottom: var(--space-4);">
           <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); margin-bottom: 6px;">
             <div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <h3 style="font-size: var(--text-base); font-weight: 600; color: var(--text-primary); margin: 0;">${escapeHtml(proj.title || 'Research Project')}</h3>
+                <h4 style="font-size: var(--text-base); font-weight: 600; color: var(--text-primary); margin: 0;">${escapeHtml(proj.title || 'Research Project')}</h4>
                 <span class="badge" style="font-size: 10px; background: rgba(16, 185, 129, 0.12); color: var(--status-success); border: 1px solid rgba(16, 185, 129, 0.3);">
                   ${getIcon('check')} Valid ${escapeHtml(pkg.fkf_version ? 'FKF v' + pkg.fkf_version : (data.fkf_version ? 'FKF v' + data.fkf_version : 'FKF 2.0'))}
                 </span>
@@ -557,13 +583,13 @@
             ${privateSession.activeTab === 'sources' ? `
               <div style="display: flex; flex-direction: column; gap: 6px;">
                 ${(preview.sources || []).map(s => `
-                  <div style="padding: 6px 8px; background-color: var(--bg-tertiary); border-radius: 4px; border: 1px solid var(--border-primary);">
+                  <div style="padding: 6px 8px; background-color: var(--bg-tertiary); border-radius: 4px; border: 1px solid var(--border-primary); font-size: 11px;">
                     <div style="display: flex; align-items: center; justify-content: space-between;">
                       <strong style="font-size: 11px; color: var(--text-primary);">${escapeHtml(s.title)}</strong>
                       <span class="badge" style="font-size: 9px;">${escapeHtml(s.source_type || 'source')}</span>
                     </div>
                     <div class="text-secondary" style="font-size: 10px; margin-top: 2px;">
-                      ${s.authors && s.authors.length ? escapeHtml(s.authors.join(', ')) : 'Unknown authors'} &bull; ${s.publication_date || 'Date unknown'} &bull; ${s.excerpt_count || 0} excerpts
+                      ${s.source_url ? `<a href="${escapeHtml(s.source_url)}" target="_blank" rel="noopener noreferrer" style="color: var(--accent-primary); text-decoration: underline;">${escapeHtml(s.source_url)}</a> &bull; ` : ''}${s.authors && s.authors.length ? escapeHtml(s.authors.join(', ')) + ' &bull; ' : ''}${s.publication_date ? escapeHtml(s.publication_date) + ' &bull; ' : ''}${s.excerpt_count || 0} excerpts
                     </div>
                   </div>
                 `).join('')}
@@ -617,7 +643,7 @@
           <label style="display: flex; align-items: flex-start; gap: 8px; font-size: var(--text-xs); color: var(--text-primary); cursor: pointer;">
             <input type="checkbox" id="exchange-approval-checkbox" ${privateSession.approvalChecked ? 'checked' : ''} ${isCommitting ? 'disabled' : ''} style="margin-top: 2px;" />
             <div>
-              <strong style="color: var(--text-primary);">I approve importing this package into ${destinationLabel}</strong>
+              <strong style="color: var(--text-primary);">I have reviewed this package and approve importing it into ${escapeHtml(destProjectTitle)}.</strong>
               <div class="text-secondary" style="font-size: 11px; margin-top: 2px; line-height: 1.5;">
                 All entities will be committed inside an isolated database transaction. Zero partial writes will occur if an error arises.
               </div>
@@ -634,13 +660,13 @@
       `;
 
       footerEl.innerHTML = `
-        <button type="button" class="btn btn--secondary btn--md" id="btn-exchange-preview-back" ${isCommitting ? 'disabled' : ''}>Back</button>
+        <button type="button" class="btn btn--secondary btn--md" id="btn-exchange-preview-back" ${isCommitting ? 'disabled' : ''}>Cancel</button>
         <button type="button" class="btn btn--primary btn--md" id="btn-exchange-approve-commit" ${(!privateSession.approvalChecked || isCommitting) ? 'disabled' : ''}>
           ${isCommitting ? `
             <span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>
-            <span>Committing Import...</span>
+            <span>Importing...</span>
           ` : `
-            ${getIcon('check')} <span>Approve & Import</span>
+            ${getIcon('check')} <span>Import into Project</span>
           `}
         </button>
       `;
@@ -688,9 +714,9 @@
           <div style="width: 48px; height: 48px; border-radius: 999px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: var(--status-success); display: inline-flex; align-items: center; justify-content: center; margin-bottom: var(--space-3);">
             ${getIcon('check')}
           </div>
-          <h3 style="font-size: var(--text-lg); font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">Knowledge Package Imported Successfully</h3>
+          <h3 style="font-size: var(--text-lg); font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;">Import Complete</h3>
           <p class="text-secondary" style="font-size: var(--text-xs); line-height: 1.6; max-width: 500px; margin: 0 auto var(--space-4) auto;">
-            The package entities have been committed to MySQL in an atomic transaction with durable WikiLinks, bibliographic records, and graph relations.
+            Your knowledge package has been imported successfully. Your imported content is now available in the selected Project.
           </p>
 
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; max-width: 600px; margin: 0 auto var(--space-4) auto; text-align: left;">
@@ -723,7 +749,7 @@
       footerEl.innerHTML = `
         <button type="button" class="btn btn--secondary btn--md" id="btn-exchange-success-close">Close</button>
         <button type="button" class="btn btn--primary btn--md" id="btn-exchange-open-project">
-          ${getIcon('share-2')} <span>Open Imported Project</span>
+          ${getIcon('share-2')} <span>Open Project</span>
         </button>
       `;
 
@@ -784,8 +810,14 @@
 
       if (!res.ok || data.valid === false) {
         privateSession.step = 'error';
-        privateSession.errorMessage = data.error || 'Inspection failed.';
-        privateSession.errorDetails = (data.errors && data.errors.length) ? data.errors : [{ code: 'VALIDATION_FAILED', message: data.error || 'The package is invalid.' }];
+        const errList = (data.errors && data.errors.length)
+          ? data.errors
+          : (data.validation && data.validation.errors && data.validation.errors.length)
+            ? data.validation.errors
+            : [];
+        const topErrorMsg = data.error || (errList.length ? errList[0].message : null);
+        privateSession.errorMessage = topErrorMsg || (res.status === 404 ? 'Inspection endpoint returned HTTP 404. Ensure Flowden is reachable on this port.' : `Inspection failed (HTTP ${res.status}).`);
+        privateSession.errorDetails = errList.length ? errList : [{ code: data.code || `HTTP_${res.status}`, message: privateSession.errorMessage }];
         privateSession.inspectionToken = null;
         renderModal();
         return;

@@ -25,6 +25,10 @@ const {
   parseFkfDocument,
   stageCanonicalPackage
 } = require('../utils/fkfCanonicalParser');
+const {
+  parseMarkdownDocument,
+  isMarkdownFile
+} = require('../utils/markdownKnowledgeParser');
 
 function isFkfJsonFile(filePath, filename) {
   const ext = path.extname(filename || filePath || '').toLowerCase();
@@ -554,7 +558,17 @@ class KnowledgeExchangeService {
     );
 
     let centralDir = null;
-    if (isFkfJsonFile(zipFilePath, originalFilename)) {
+    if (isMarkdownFile(zipFilePath, originalFilename)) {
+      const rawMd = fs.readFileSync(zipFilePath, 'utf8');
+      const parseRes = parseMarkdownDocument(rawMd, originalFilename);
+      if (!parseRes.valid) {
+        const err = new Error('Markdown knowledge package failed validation.');
+        err.code = 'PACKAGE_VALIDATION_FAILED';
+        err.errors = parseRes.errors;
+        throw err;
+      }
+      stageCanonicalPackage(parseRes.canonical, stageDir);
+    } else if (isFkfJsonFile(zipFilePath, originalFilename)) {
       const rawFkf = fs.readFileSync(zipFilePath, 'utf8');
       const parseRes = parseFkfDocument(rawFkf);
       if (!parseRes.valid) {
@@ -1110,11 +1124,17 @@ class KnowledgeExchangeService {
             );
           }
 
+          const targetFolderInfo = noteMeta.folder_id && packageIdMap.has(noteMeta.folder_id)
+            ? packageIdMap.get(noteMeta.folder_id)
+            : null;
+
           importedNotes.push({
             packageId: noteMeta.id,
             dbId: noteDbId,
             rawContent: cleanNoteMd,
-            title: finalNoteTitle
+            title: finalNoteTitle,
+            folderDbId: targetFolderDbId,
+            folderTitle: targetFolderInfo ? targetFolderInfo.finalTitle : 'General Notes'
           });
         }
       }
@@ -1412,6 +1432,185 @@ class KnowledgeExchangeService {
               );
               createdSummary.board_connection_count += 1;
             }
+          }
+        }
+      } else if (importedNotes.length > 0) {
+        // Auto-create / Auto-project Spatial Board for Markdown import or packages without explicit board projection
+        const existingBoards = await conn.query(
+          'SELECT id, title, description FROM boards WHERE project_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1',
+          [targetProjectId]
+        );
+        let boardDbId;
+        let isExistingBoard = false;
+        if (existingBoards && existingBoards.length > 0) {
+          boardDbId = existingBoards[0].id;
+          isExistingBoard = true;
+          // IMPORTANT: Do NOT overwrite existing board title or description on merge (Requirement 4)
+        } else {
+          const boardTitle = `${targetProjectTitle} Board`;
+          const boardDesc = 'Spatial workspace board';
+          const bIns = await conn.query(
+            `INSERT INTO boards (project_id, user_id, title, description, zoom_level, viewport_x, viewport_y, grid_size)
+             VALUES (?, ?, ?, ?, 1.0, 0, 0, 20)`,
+            [targetProjectId, userId, boardTitle, boardDesc]
+          );
+          boardDbId = bIns.insertId || (bIns[0] && bIns[0].insertId);
+
+          // Register board in canonical entities & project_entities
+          await conn.query(
+            `INSERT INTO entities (uuid, entity_type, entity_id, owner_user_id, primary_project_id, title, search_text)
+             VALUES (UUID(), 'board', ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE title = VALUES(title), search_text = VALUES(search_text), updated_at = NOW()`,
+            [boardDbId, userId, targetProjectId, boardTitle, `${boardTitle} ${boardDesc}`]
+          );
+          await conn.query(
+            `INSERT INTO project_entities (project_id, entity_type, entity_id, access_role, added_by)
+             VALUES (?, 'board', ?, 'contributor', ?)
+             ON DUPLICATE KEY UPDATE access_role = VALUES(access_role)`,
+            [targetProjectId, boardDbId, userId]
+          );
+        }
+
+        // Deduplicate against existing note cards on this board (Requirement 2 & 4)
+        const existingCardRows = await conn.query(
+          'SELECT reference_id, title FROM board_items WHERE board_id = ? AND reference_type = ? AND deleted_at IS NULL',
+          [boardDbId, 'note']
+        );
+        const existingNoteIds = new Set((existingCardRows || []).map(r => r.reference_id).filter(Boolean));
+        const cleanCardTitle = (t) => String(t || '').replace(/\s*\(imported.*?\)/gi, '').trim().toLowerCase();
+        const existingTitles = new Set((existingCardRows || []).map(r => cleanCardTitle(r.title)).filter(Boolean));
+
+        const notesToProject = importedNotes.filter(n => {
+          if (existingNoteIds.has(n.dbId)) return false;
+          if (n.title && existingTitles.has(cleanCardTitle(n.title))) return false;
+          return true;
+        });
+
+        if (notesToProject.length > 0) {
+          // If merging into existing board, offset past existing items to prevent any visual overlap
+          let baseOffsetX = 60;
+          let baseOffsetY = 60;
+          if (isExistingBoard) {
+            const extRows = await conn.query(
+              'SELECT MAX(position_x + width) AS max_x FROM board_items WHERE board_id = ? AND deleted_at IS NULL',
+              [boardDbId]
+            );
+            if (extRows && extRows[0] && extRows[0].max_x > 0) {
+              baseOffsetX = Math.max(baseOffsetX, Number(extRows[0].max_x) + 120);
+            }
+            const grpExtRows = await conn.query(
+              'SELECT MAX(position_x + width) AS max_x FROM board_groups WHERE board_id = ?',
+              [boardDbId]
+            );
+            if (grpExtRows && grpExtRows[0] && grpExtRows[0].max_x > 0) {
+              baseOffsetX = Math.max(baseOffsetX, Number(grpExtRows[0].max_x) + 120);
+            }
+          }
+
+          const folderColors = [
+            '#6366f1', // Indigo
+            '#06b6d4', // Cyan
+            '#10b981', // Emerald
+            '#f59e0b', // Amber
+            '#ec4899', // Pink
+            '#8b5cf6', // Purple
+            '#3b82f6', // Blue
+            '#14b8a6'  // Teal
+          ];
+
+          const CARD_WIDTH = 280;
+          const CARD_HEIGHT = 180;
+          const CARD_GAP_X = 40;
+          const CARD_GAP_Y = 40;
+          const GROUP_PAD_X = 30;
+          const GROUP_PAD_TOP = 50;
+          const GROUP_PAD_BOTTOM = 30;
+          const GROUP_GAP_X = 60;
+          const GROUP_GAP_Y = 60;
+          const FOLDERS_PER_ROW = 3;
+
+          const folderOrder = [];
+          const folderMap = new Map();
+
+          for (const note of notesToProject) {
+            const key = note.folderDbId ? `f_${note.folderDbId}` : '__general__';
+            if (!folderMap.has(key)) {
+              const entry = {
+                folderDbId: note.folderDbId,
+                folderTitle: note.folderTitle || 'General Notes',
+                notes: []
+              };
+              folderMap.set(key, entry);
+              folderOrder.push(entry);
+            }
+            folderMap.get(key).notes.push(note);
+          }
+
+          let currentGroupY = baseOffsetY;
+
+          for (let rowIdx = 0; rowIdx < Math.ceil(folderOrder.length / FOLDERS_PER_ROW); rowIdx++) {
+            const rowFolders = folderOrder.slice(rowIdx * FOLDERS_PER_ROW, (rowIdx + 1) * FOLDERS_PER_ROW);
+            let rowMaxHeight = 0;
+            let currentGroupX = baseOffsetX;
+
+            for (let colIdx = 0; colIdx < rowFolders.length; colIdx++) {
+              const folderGroup = rowFolders[colIdx];
+              const numNotes = folderGroup.notes.length;
+              const cols = numNotes === 1 ? 1 : 2;
+              const rows = Math.ceil(numNotes / cols);
+
+              const groupWidth = GROUP_PAD_X * 2 + cols * CARD_WIDTH + (cols - 1) * CARD_GAP_X;
+              const groupHeight = GROUP_PAD_TOP + rows * CARD_HEIGHT + (rows - 1) * CARD_GAP_Y + GROUP_PAD_BOTTOM;
+
+              if (groupHeight > rowMaxHeight) {
+                rowMaxHeight = groupHeight;
+              }
+
+              const colorIndex = (rowIdx * FOLDERS_PER_ROW + colIdx) % folderColors.length;
+              const groupColor = folderColors[colorIndex];
+
+              const gIns = await conn.query(
+                `INSERT INTO board_groups (board_id, title, color, position_x, position_y, width, height)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [boardDbId, folderGroup.folderTitle.trim(), groupColor, currentGroupX, currentGroupY, groupWidth, groupHeight]
+              );
+              const groupDbId = gIns.insertId || (gIns[0] && gIns[0].insertId);
+
+              for (let noteIdx = 0; noteIdx < folderGroup.notes.length; noteIdx++) {
+                const note = folderGroup.notes[noteIdx];
+                const c = noteIdx % cols;
+                const r = Math.floor(noteIdx / cols);
+
+                const cardX = currentGroupX + GROUP_PAD_X + c * (CARD_WIDTH + CARD_GAP_X);
+                const cardY = currentGroupY + GROUP_PAD_TOP + r * (CARD_HEIGHT + CARD_GAP_Y);
+                const excerpt = derivePlaintextExcerpt(note.rawContent, 150);
+
+                await conn.query(
+                  `INSERT INTO board_items (
+                    board_id, user_id, item_type, reference_type, reference_id,
+                    title, content, position_x, position_y, width, height, color, z_index, group_id
+                  ) VALUES (?, ?, 'note', 'note', ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+                  [
+                    boardDbId,
+                    userId,
+                    note.dbId,
+                    note.title,
+                    excerpt,
+                    cardX,
+                    cardY,
+                    CARD_WIDTH,
+                    CARD_HEIGHT,
+                    groupColor,
+                    groupDbId
+                  ]
+                );
+                createdSummary.board_item_count += 1;
+              }
+
+              currentGroupX += groupWidth + GROUP_GAP_X;
+            }
+
+            currentGroupY += rowMaxHeight + GROUP_GAP_Y;
           }
         }
       }

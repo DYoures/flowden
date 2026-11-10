@@ -229,3 +229,162 @@ module.exports = {
   listTools,
   callTool
 };
+
+// -----------------------------------------------------------------------------
+// MCP Stdio Server Bridge for Claude Desktop / External MCP Clients
+// -----------------------------------------------------------------------------
+async function startStdioServer() {
+  const apiUrlRaw = process.env.FLOWDEN_API_URL;
+  const apiKey = process.env.FLOWDEN_API_KEY;
+
+  if (!apiUrlRaw || !apiKey) {
+    console.error('[FLOWDEN MCP ERROR] Both FLOWDEN_API_URL and FLOWDEN_API_KEY environment variables are required.');
+    if (!apiUrlRaw) console.error('[FLOWDEN MCP ERROR] Missing FLOWDEN_API_URL (e.g., http://127.0.0.1:3000/mcp)');
+    if (!apiKey) console.error('[FLOWDEN MCP ERROR] Missing FLOWDEN_API_KEY (personal access key starting with fld_mcp_)');
+    process.exit(1);
+  }
+
+  const apiUrl = apiUrlRaw.replace(/\/+$/, '');
+  const toolsUrl = `${apiUrl}/tools`;
+  const callUrl = `${apiUrl}/call`;
+
+  console.error(`[FLOWDEN MCP] Fetching tool definitions from ${toolsUrl}...`);
+
+  let toolsList = [];
+  try {
+    const res = await fetch(toolsUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      console.error(`[FLOWDEN MCP ERROR] Failed to fetch tools from ${toolsUrl}: HTTP ${res.status} ${res.statusText}. ${errBody}`);
+      process.exit(1);
+    }
+
+    const data = await res.json();
+    if (!data || !Array.isArray(data.tools)) {
+      console.error('[FLOWDEN MCP ERROR] Invalid tools response format from Flowden server.');
+      process.exit(1);
+    }
+    toolsList = data.tools;
+  } catch (err) {
+    console.error(`[FLOWDEN MCP ERROR] Network error connecting to Flowden at ${toolsUrl}: ${err.message}`);
+    process.exit(1);
+  }
+
+  console.error(`[FLOWDEN MCP] Discovered ${toolsList.length} tool(s) from Flowden backend.`);
+
+  const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
+  const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+  const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
+
+  const server = new Server(
+    {
+      name: 'flowden',
+      version: '1.0.0'
+    },
+    {
+      capabilities: {
+        tools: {}
+      }
+    }
+  );
+
+  const mcpTools = toolsList.map(t => {
+    const schema = t.inputSchema || t.parameters || { type: 'object', properties: {} };
+    return {
+      name: t.name,
+      description: t.description || '',
+      inputSchema: {
+        type: 'object',
+        properties: schema.properties || {},
+        ...(Array.isArray(schema.required) ? { required: schema.required } : {})
+      }
+    };
+  });
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return {
+      tools: mcpTools
+    };
+  });
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: toolArgs } = request.params || {};
+    try {
+      const callRes = await fetch(callUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          name,
+          arguments: toolArgs || {}
+        })
+      });
+
+      const data = await callRes.json().catch(() => null);
+
+      if (!callRes.ok || (data && data.status === 'error')) {
+        const errMsg = (data && (data.error || data.message))
+          ? (data.error || data.message)
+          : `HTTP ${callRes.status}: ${callRes.statusText || 'Tool execution failed'}`;
+        console.error(`[FLOWDEN MCP Error] Tool "${name}" execution failed:`, errMsg);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg, null, 2)
+            }
+          ],
+          isError: true
+        };
+      }
+
+      const resultPayload = data && data.result !== undefined ? data.result : data;
+      const textOutput = typeof resultPayload === 'string'
+        ? resultPayload
+        : JSON.stringify(resultPayload, null, 2);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: textOutput
+          }
+        ],
+        isError: false
+      };
+    } catch (err) {
+      console.error(`[FLOWDEN MCP Exception] Tool "${name}" call failed:`, err.message);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Tool execution failed: ${err.message}`
+          }
+        ],
+        isError: true
+      };
+    }
+  });
+
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error('[FLOWDEN MCP] Stdio server connected and listening for MCP client requests.');
+}
+
+if (require.main === module) {
+  startStdioServer().catch(err => {
+    console.error('[FLOWDEN MCP FATAL]', err);
+    process.exit(1);
+  });
+}
